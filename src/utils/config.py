@@ -38,6 +38,8 @@ class Config:
             "theme": "system",  # 主题：light, dark, system
             "thumbnail_size": 150,  # 缩略图大小
             "default_player": "",  # 默认视频播放器路径
+            "use_embedded_player": True,  # 是否使用内嵌播放器
+            "player_volume": 50,  # 播放器音量 (0-100)
         }
     }
 

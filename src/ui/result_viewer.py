@@ -10,10 +10,13 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QComboBox, QFileDialog,
     QMessageBox, QSplitter, QGroupBox, QFormLayout, QSpinBox,
-    QScrollArea, QGridLayout, QMenu, QApplication, QDialog, QLineEdit
+    QScrollArea, QGridLayout, QMenu, QApplication, QDialog, QLineEdit,
+    QTabWidget, QStackedWidget
 )
 from PySide6.QtCore import Qt, QSize, QUrl, QProcess, Signal, QThread
 from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QAction
+
+from src.ui.video_player import VideoPlayer
 
 
 class ThumbnailLoader(QThread):
@@ -259,9 +262,13 @@ class ResultViewer(QWidget):
 
         details_layout.addWidget(details_group)
 
+        # 创建堆叠小部件，用于切换预览和视频播放器
+        self.stacked_widget = QStackedWidget()
+
         # 预览组
-        preview_group = QGroupBox("预览")
-        preview_layout = QVBoxLayout(preview_group)
+        preview_widget = QWidget()
+        preview_layout = QVBoxLayout(preview_widget)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
 
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignCenter)
@@ -269,17 +276,45 @@ class ResultViewer(QWidget):
         self.preview_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ddd;")
         preview_layout.addWidget(self.preview_label)
 
+        # 视频播放器组
+        video_widget = QWidget()
+        video_layout = QVBoxLayout(video_widget)
+        video_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 创建视频播放器
+        self.video_player = VideoPlayer()
+        self.video_player.setMinimumSize(300, 300)
+        self.video_player.playback_finished.connect(self.on_playback_finished)
+
+        # 设置初始音量
+        volume = self.config.get("ui", "player_volume", 50)
+        self.video_player.set_volume(volume)
+
+        video_layout.addWidget(self.video_player)
+
+        # 添加到堆叠小部件
+        self.stacked_widget.addWidget(preview_widget)  # 索引0 - 预览模式
+        self.stacked_widget.addWidget(video_widget)    # 索引1 - 视频模式
+
+        # 默认显示预览模式
+        self.stacked_widget.setCurrentIndex(0)
+
+        # 添加到布局
+        preview_group = QGroupBox("预览/视频")
+        preview_group_layout = QVBoxLayout(preview_group)
+        preview_group_layout.addWidget(self.stacked_widget)
+
         details_layout.addWidget(preview_group)
 
         # 操作组
         actions_group = QGroupBox("操作")
         actions_layout = QVBoxLayout(actions_group)
 
-        self.open_video_button = QPushButton("打开视频")
+        self.open_video_button = QPushButton("在外部播放器中打开视频")
         self.open_video_button.clicked.connect(self.open_video)
         actions_layout.addWidget(self.open_video_button)
 
-        self.jump_to_time_button = QPushButton("跳转到时间点")
+        self.jump_to_time_button = QPushButton("播放视频并跳转到时间点")
         self.jump_to_time_button.clicked.connect(self.jump_to_time)
         actions_layout.addWidget(self.jump_to_time_button)
 
@@ -324,11 +359,11 @@ class ResultViewer(QWidget):
         self.action_open_image.triggered.connect(self.open_image)
         self.context_menu.addAction(self.action_open_image)
 
-        self.action_open_video = QAction("打开视频", self)
+        self.action_open_video = QAction("在外部播放器中打开视频", self)
         self.action_open_video.triggered.connect(self.open_video)
         self.context_menu.addAction(self.action_open_video)
 
-        self.action_jump_to_time = QAction("跳转到时间点", self)
+        self.action_jump_to_time = QAction("播放视频并跳转到时间点", self)
         self.action_jump_to_time.triggered.connect(self.jump_to_time)
         self.context_menu.addAction(self.action_jump_to_time)
 
@@ -554,6 +589,13 @@ class ResultViewer(QWidget):
         else:
             self.detail_confidence.setText("未知")
 
+        # 切换回预览模式
+        self.stacked_widget.setCurrentIndex(0)
+
+        # 如果视频播放器正在播放，停止播放
+        if hasattr(self, "video_player"):
+            self.video_player.stop()
+
         # 加载预览图
         try:
             pixmap = QPixmap(crop_item["crop_image_path"])
@@ -621,10 +663,33 @@ class ResultViewer(QWidget):
             return
 
         timestamp_ms = self.current_crop["timestamp_ms"]
-        timestamp_seconds = timestamp_ms / 1000
 
-        # 尝试使用不同的播放器打开视频并跳转到指定时间
-        self.try_open_with_player(video_path, timestamp_seconds)
+        # 检查是否使用内嵌播放器
+        use_embedded_player = self.config.get("ui", "use_embedded_player", True)
+
+        if use_embedded_player:
+            # 使用内嵌播放器播放视频并跳转到指定时间点
+            if self.video_player.load_video(video_path):
+                # 设置音量
+                volume = self.config.get("ui", "player_volume", 50)
+                self.video_player.set_volume(volume)
+
+                # 切换到视频播放器模式
+                self.stacked_widget.setCurrentIndex(1)
+
+                # 先设置跳转位置，然后开始播放
+                # 视频播放器会在媒体加载完成后自动跳转到指定位置
+                self.video_player.seek_to(timestamp_ms)
+
+                # 开始播放
+                self.video_player.play()
+                return
+            else:
+                # 如果内嵌播放器加载失败，尝试使用外部播放器
+                QMessageBox.warning(self, "警告", "内嵌播放器加载视频失败，尝试使用外部播放器")
+
+        # 使用外部播放器
+        self.try_open_with_player(video_path, timestamp_ms / 1000)
 
     def try_open_with_player(self, video_path, timestamp_seconds):
         """
@@ -636,63 +701,36 @@ class ResultViewer(QWidget):
         """
         # 获取配置中的默认播放器
         default_player = self.config.get("ui", "default_player", "")
+        player_found = False
 
-        # 检测操作系统
+        # 尝试使用特定于平台的播放器
         if sys.platform == "darwin":  # macOS
             # 检查是否安装了IINA
-            iina_installed = False
             try:
                 result = subprocess.run(["which", "iina"], capture_output=True, text=True)
                 iina_path = result.stdout.strip()
-                iina_installed = bool(iina_path)
-            except:
-                iina_installed = False
+                if iina_path:
+                    try:
+                        subprocess.Popen(["iina", "--mpv-start=" + str(timestamp_seconds), video_path])
+                        player_found = True
+                    except Exception as e:
+                        print(f"使用IINA打开视频失败: {e}")
+            except Exception:
+                pass
 
-            # 如果IINA已安装，尝试使用它
-            if iina_installed:
+            # 如果IINA不可用，检查是否安装了VLC
+            if not player_found:
                 try:
-                    subprocess.Popen(["iina", "--mpv-start=" + str(timestamp_seconds), video_path])
-                    return
-                except Exception as e:
-                    print(f"使用IINA打开视频失败: {e}")
-
-            # 检查是否安装了VLC
-            vlc_installed = False
-            try:
-                result = subprocess.run(["which", "vlc"], capture_output=True, text=True)
-                vlc_path = result.stdout.strip()
-                vlc_installed = bool(vlc_path)
-            except:
-                vlc_installed = False
-
-            # 如果VLC已安装，尝试使用它
-            if vlc_installed:
-                try:
-                    subprocess.Popen(["vlc", "--start-time=" + str(int(timestamp_seconds)), video_path])
-                    return
-                except Exception as e:
-                    print(f"使用VLC打开视频失败: {e}")
-
-            # 如果配置了默认播放器，尝试使用它
-            if default_player and os.path.exists(default_player):
-                try:
-                    subprocess.Popen([default_player, video_path])
-                    QMessageBox.information(
-                        self,
-                        "提示",
-                        f"已使用自定义播放器打开视频，请手动跳转到 {self.format_timestamp(int(timestamp_seconds * 1000))}"
-                    )
-                    return
-                except Exception as e:
-                    print(f"使用自定义播放器打开视频失败: {e}")
-
-            # 使用系统默认播放器
-            QDesktopServices.openUrl(QUrl.fromLocalFile(video_path))
-            QMessageBox.information(
-                self,
-                "提示",
-                f"已打开视频，请手动跳转到 {self.format_timestamp(int(timestamp_seconds * 1000))}"
-            )
+                    result = subprocess.run(["which", "vlc"], capture_output=True, text=True)
+                    vlc_path = result.stdout.strip()
+                    if vlc_path:
+                        try:
+                            subprocess.Popen(["vlc", "--start-time=" + str(int(timestamp_seconds)), video_path])
+                            player_found = True
+                        except Exception as e:
+                            print(f"使用VLC打开视频失败: {e}")
+                except Exception:
+                    pass
 
         elif sys.platform == "win32":  # Windows
             # 检查是否安装了VLC
@@ -701,79 +739,55 @@ class ResultViewer(QWidget):
                 "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe"
             ]
 
-            vlc_path = None
             for path in vlc_paths:
                 if os.path.exists(path):
-                    vlc_path = path
-                    break
-
-            # 如果找到VLC，尝试使用它
-            if vlc_path:
-                try:
-                    subprocess.Popen([vlc_path, "--start-time=" + str(int(timestamp_seconds)), video_path])
-                    return
-                except Exception as e:
-                    print(f"使用VLC打开视频失败: {e}")
-
-            # 如果配置了默认播放器，尝试使用它
-            if default_player and os.path.exists(default_player):
-                try:
-                    subprocess.Popen([default_player, video_path])
-                    QMessageBox.information(
-                        self,
-                        "提示",
-                        f"已使用自定义播放器打开视频，请手动跳转到 {self.format_timestamp(int(timestamp_seconds * 1000))}"
-                    )
-                    return
-                except Exception as e:
-                    print(f"使用自定义播放器打开视频失败: {e}")
-
-            # 使用系统默认播放器
-            QDesktopServices.openUrl(QUrl.fromLocalFile(video_path))
-            QMessageBox.information(
-                self,
-                "提示",
-                f"已打开视频，请手动跳转到 {self.format_timestamp(int(timestamp_seconds * 1000))}"
-            )
+                    try:
+                        subprocess.Popen([path, "--start-time=" + str(int(timestamp_seconds)), video_path])
+                        player_found = True
+                        break
+                    except Exception as e:
+                        print(f"使用VLC打开视频失败: {e}")
 
         else:  # Linux 或其他
             # 检查是否安装了VLC
-            vlc_installed = False
             try:
                 result = subprocess.run(["which", "vlc"], capture_output=True, text=True)
                 vlc_path = result.stdout.strip()
-                vlc_installed = bool(vlc_path)
-            except:
-                vlc_installed = False
+                if vlc_path:
+                    try:
+                        subprocess.Popen(["vlc", "--start-time=" + str(int(timestamp_seconds)), video_path])
+                        player_found = True
+                    except Exception as e:
+                        print(f"使用VLC打开视频失败: {e}")
+            except Exception:
+                pass
 
-            # 如果VLC已安装，尝试使用它
-            if vlc_installed:
-                try:
-                    subprocess.Popen(["vlc", "--start-time=" + str(int(timestamp_seconds)), video_path])
-                    return
-                except Exception as e:
-                    print(f"使用VLC打开视频失败: {e}")
+        # 如果没有找到专用播放器，尝试使用配置的默认播放器
+        if not player_found and default_player and os.path.exists(default_player):
+            try:
+                subprocess.Popen([default_player, video_path])
+                QMessageBox.information(
+                    self,
+                    "提示",
+                    f"已使用自定义播放器打开视频，请手动跳转到 {self.format_timestamp(int(timestamp_seconds * 1000))}"
+                )
+                player_found = True
+            except Exception as e:
+                print(f"使用自定义播放器打开视频失败: {e}")
 
-            # 如果配置了默认播放器，尝试使用它
-            if default_player and os.path.exists(default_player):
-                try:
-                    subprocess.Popen([default_player, video_path])
-                    QMessageBox.information(
-                        self,
-                        "提示",
-                        f"已使用自定义播放器打开视频，请手动跳转到 {self.format_timestamp(int(timestamp_seconds * 1000))}"
-                    )
-                    return
-                except Exception as e:
-                    print(f"使用自定义播放器打开视频失败: {e}")
-
-            # 使用系统默认播放器
+        # 如果所有尝试都失败，使用系统默认播放器
+        if not player_found:
             QDesktopServices.openUrl(QUrl.fromLocalFile(video_path))
             QMessageBox.information(
                 self,
                 "提示",
                 f"已打开视频，请手动跳转到 {self.format_timestamp(int(timestamp_seconds * 1000))}"
             )
+
+    def on_playback_finished(self):
+        """视频播放完成处理"""
+        # 切换回预览模式
+        self.stacked_widget.setCurrentIndex(0)
 
     def open_image(self):
         """打开图像"""
