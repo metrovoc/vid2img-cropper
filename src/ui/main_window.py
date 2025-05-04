@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QFileDialog, QComboBox, QSpinBox, QDoubleSpinBox,
     QCheckBox, QTabWidget, QSplitter, QMessageBox, QGroupBox, QFormLayout,
-    QLineEdit, QSlider, QStatusBar, QApplication
+    QLineEdit, QSlider, QStatusBar, QApplication, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize, QUrl, QDir
 from PySide6.QtGui import QIcon, QPixmap, QDesktopServices
@@ -133,7 +133,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(self.processing_tab)
 
         # 文件选择区域
-        file_group = QGroupBox("视频文件")
+        file_group = QGroupBox("视频文件队列")
         file_layout = QVBoxLayout(file_group)
 
         file_select_layout = QHBoxLayout()
@@ -147,6 +147,28 @@ class MainWindow(QMainWindow):
         file_select_layout.addWidget(self.browse_button)
 
         file_layout.addLayout(file_select_layout)
+
+        # 视频队列列表
+        self.queue_list = QListWidget()
+        self.queue_list.setMinimumHeight(100)
+        file_layout.addWidget(self.queue_list)
+
+        # 队列操作按钮
+        queue_buttons_layout = QHBoxLayout()
+
+        self.add_to_queue_button = QPushButton("添加到队列")
+        self.add_to_queue_button.clicked.connect(self.add_to_queue)
+        queue_buttons_layout.addWidget(self.add_to_queue_button)
+
+        self.remove_from_queue_button = QPushButton("从队列移除")
+        self.remove_from_queue_button.clicked.connect(self.remove_from_queue)
+        queue_buttons_layout.addWidget(self.remove_from_queue_button)
+
+        self.clear_queue_button = QPushButton("清空队列")
+        self.clear_queue_button.clicked.connect(self.clear_queue)
+        queue_buttons_layout.addWidget(self.clear_queue_button)
+
+        file_layout.addLayout(queue_buttons_layout)
 
         # 文件信息标签
         self.file_info_label = QLabel("未选择文件")
@@ -421,6 +443,62 @@ class MainWindow(QMainWindow):
         if index == 1:  # 结果选项卡
             self.result_viewer.refresh_results()
 
+    def add_to_queue(self):
+        """添加文件到队列"""
+        file_paths = self.file_path_edit.text().split("; ")
+        if not file_paths or not file_paths[0]:
+            QMessageBox.warning(self, "警告", "请先选择视频文件")
+            return
+
+        # 添加到队列列表
+        for path in file_paths:
+            if path and os.path.exists(path):
+                # 检查是否已在队列中
+                exists = False
+                for i in range(self.queue_list.count()):
+                    if self.queue_list.item(i).data(Qt.UserRole) == path:
+                        exists = True
+                        break
+
+                if not exists:
+                    item = QListWidgetItem(os.path.basename(path))
+                    item.setData(Qt.UserRole, path)
+                    self.queue_list.addItem(item)
+
+        # 清空文件选择框
+        self.file_path_edit.clear()
+        self.file_info_label.setText(f"队列中有 {self.queue_list.count()} 个文件")
+
+    def remove_from_queue(self):
+        """从队列中移除选中的文件"""
+        selected_items = self.queue_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "警告", "请先选择要移除的文件")
+            return
+
+        for item in selected_items:
+            row = self.queue_list.row(item)
+            self.queue_list.takeItem(row)
+
+        self.file_info_label.setText(f"队列中有 {self.queue_list.count()} 个文件")
+
+    def clear_queue(self):
+        """清空队列"""
+        if self.queue_list.count() == 0:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "确认清空",
+            "确定要清空队列吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            self.queue_list.clear()
+            self.file_info_label.setText("队列已清空")
+
     def on_browse_clicked(self):
         """浏览按钮点击处理"""
         file_dialog = QFileDialog()
@@ -466,13 +544,36 @@ class MainWindow(QMainWindow):
 
     def on_start_clicked(self):
         """开始按钮点击处理"""
-        # 获取视频文件路径
-        video_paths_text = self.file_path_edit.text()
-        if not video_paths_text:
-            QMessageBox.warning(self, "警告", "请先选择视频文件")
-            return
+        # 检查队列中是否有视频
+        if self.queue_list.count() == 0:
+            # 如果队列为空，检查是否有选择的文件
+            video_paths_text = self.file_path_edit.text()
+            if video_paths_text:
+                # 如果有选择的文件，询问是否添加到队列
+                reply = QMessageBox.question(
+                    self,
+                    "添加到队列",
+                    "当前队列为空，是否将选择的文件添加到队列？",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
 
-        video_paths = [path.strip() for path in video_paths_text.split(";")]
+                if reply == QMessageBox.Yes:
+                    self.add_to_queue()
+                else:
+                    return
+            else:
+                QMessageBox.warning(self, "警告", "请先选择视频文件或添加文件到队列")
+                return
+
+        # 从队列中获取视频路径
+        video_paths = []
+        for i in range(self.queue_list.count()):
+            video_paths.append(self.queue_list.item(i).data(Qt.UserRole))
+
+        if not video_paths:
+            QMessageBox.warning(self, "警告", "队列中没有有效的视频文件")
+            return
 
         # 保存当前设置
         self.save_settings()

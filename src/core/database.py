@@ -5,6 +5,7 @@ import os
 import sqlite3
 import json
 from pathlib import Path
+import hashlib
 
 
 class Database:
@@ -46,6 +47,7 @@ class Database:
             frame_height INTEGER,
             group_id INTEGER,
             feature_vector TEXT,
+            image_hash TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (group_id) REFERENCES face_groups(id)
         )
@@ -61,16 +63,21 @@ class Database:
         if "feature_vector" not in columns:
             cursor.execute("ALTER TABLE crops ADD COLUMN feature_vector TEXT")
 
+        # 检查是否需要添加image_hash列
+        if "image_hash" not in columns:
+            cursor.execute("ALTER TABLE crops ADD COLUMN image_hash TEXT")
+
         # 创建索引
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_video_path ON crops(video_path)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON crops(timestamp_ms)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_group_id ON crops(group_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_image_hash ON crops(image_hash)')
 
         conn.commit()
         conn.close()
 
     def add_crop(self, video_path, timestamp_ms, crop_image_path, bounding_box=None,
-                 confidence=None, frame_width=None, frame_height=None, group_id=None, feature_vector=None):
+                 confidence=None, frame_width=None, frame_height=None, group_id=None, feature_vector=None, image_hash=None):
         """
         添加一条裁剪记录
 
@@ -84,6 +91,7 @@ class Database:
             frame_height: 原始帧高度
             group_id: 人脸分组ID
             feature_vector: 人脸特征向量
+            image_hash: 图像哈希值
 
         Returns:
             新记录的ID
@@ -103,12 +111,12 @@ class Database:
         INSERT INTO crops (
             video_path, timestamp_ms, crop_image_path,
             bounding_box, confidence, frame_width, frame_height,
-            group_id, feature_vector
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            group_id, feature_vector, image_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             video_path, timestamp_ms, crop_image_path,
             bounding_box, confidence, frame_width, frame_height,
-            group_id, feature_vector
+            group_id, feature_vector, image_hash
         ))
 
         crop_id = cursor.lastrowid
@@ -531,3 +539,50 @@ class Database:
 
         conn.close()
         return results
+
+    def get_crop_by_image_hash(self, image_hash):
+        """
+        通过图像哈希获取裁剪记录
+
+        Args:
+            image_hash: 图像哈希值
+
+        Returns:
+            匹配的裁剪记录或None
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM crops WHERE image_hash = ? LIMIT 1", (image_hash,))
+        row = cursor.fetchone()
+
+        if row:
+            item = dict(row)
+            if item['bounding_box']:
+                item['bounding_box'] = json.loads(item['bounding_box'])
+            if item['feature_vector']:
+                item['feature_vector'] = json.loads(item['feature_vector'])
+            conn.close()
+            return item
+
+        conn.close()
+        return None
+
+    def compute_image_hash(self, image_path):
+        """
+        计算图像文件的哈希值
+
+        Args:
+            image_path: 图像文件路径
+
+        Returns:
+            图像哈希值
+        """
+        try:
+            with open(image_path, 'rb') as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+            return file_hash
+        except Exception as e:
+            print(f"计算图像哈希失败: {e}")
+            return None

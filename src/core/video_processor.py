@@ -304,7 +304,20 @@ class VideoProcessor:
             filename = f"{timestamp_str}_{i}.{self.output_format}"
             crop_path = os.path.join(output_dir, filename)
 
-            self._save_image(crop, crop_path)
+            # 计算图像哈希并检查是否已存在相同图片
+            phash, md5_hash = self._save_image(crop, crop_path)
+
+            # 检查是否已存在相同图片
+            existing_crop = self.database.get_crop_by_image_hash(md5_hash)
+            if existing_crop:
+                # 如果已存在相同图片，删除刚保存的图片并使用已存在的图片
+                try:
+                    os.remove(crop_path)
+                    print(f"检测到重复图片，使用已存在的图片: {existing_crop['crop_image_path']}")
+                    # 跳过后续处理
+                    continue
+                except Exception as e:
+                    print(f"删除重复图片失败: {e}")
 
             # 提取人脸特征向量
             feature_vector = None
@@ -335,7 +348,8 @@ class VideoProcessor:
                 frame_width=frame_width,
                 frame_height=frame_height,
                 group_id=group_id,
-                feature_vector=feature_vector
+                feature_vector=feature_vector,
+                image_hash=md5_hash
             )
 
             self.detected_faces += 1
@@ -654,7 +668,15 @@ class VideoProcessor:
         Args:
             image: OpenCV格式的图像
             path: 保存路径
+
+        Returns:
+            图像哈希值
         """
+        # 计算图像哈希
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image_rgb)
+        phash = str(imagehash.phash(pil_image))
+
         # 根据输出格式保存图像
         if self.output_format.lower() in ['jpg', 'jpeg']:
             cv2.imwrite(path, image, [cv2.IMWRITE_JPEG_QUALITY, self.output_quality])
@@ -665,6 +687,11 @@ class VideoProcessor:
         else:
             # 默认使用JPEG
             cv2.imwrite(path, image, [cv2.IMWRITE_JPEG_QUALITY, self.output_quality])
+
+        # 计算文件MD5哈希
+        md5_hash = self.database.compute_image_hash(path)
+
+        return phash, md5_hash
 
     def stop(self):
         """停止处理"""

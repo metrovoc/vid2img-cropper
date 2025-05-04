@@ -198,6 +198,11 @@ class ResultViewer(QWidget):
         control_layout.addWidget(QLabel("选择视频:"))
         control_layout.addWidget(self.video_combo)
 
+        # 批量删除按钮
+        self.delete_video_button = QPushButton("删除当前视频所有裁剪")
+        self.delete_video_button.clicked.connect(self.delete_video_crops)
+        control_layout.addWidget(self.delete_video_button)
+
         # 人脸分组选择
         self.group_combo = QComboBox()
         self.group_combo.setMinimumWidth(200)
@@ -810,13 +815,24 @@ class ResultViewer(QWidget):
         reply = QMessageBox.question(
             self,
             "确认删除",
-            "确定要删除这个裁剪吗？\n这将从数据库中删除记录，但不会删除图像文件。",
+            "确定要删除这个裁剪吗？\n这将从数据库中删除记录，并同时删除图像文件。",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             crop_id = self.current_crop["id"]
+            image_path = self.current_crop["crop_image_path"]
+
+            # 先删除图像文件
+            try:
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            except Exception as e:
+                print(f"删除图像文件失败: {e}")
+                QMessageBox.warning(self, "警告", f"删除图像文件失败: {e}")
+
+            # 再删除数据库记录
             success = self.database.delete_crop(crop_id)
 
             if success:
@@ -824,6 +840,57 @@ class ResultViewer(QWidget):
                 self.refresh_results()
             else:
                 QMessageBox.warning(self, "错误", "删除裁剪失败")
+
+    def delete_video_crops(self):
+        """删除当前视频的所有裁剪"""
+        # 检查是否选择了视频
+        video_path = self.video_combo.currentData()
+        if not video_path:
+            QMessageBox.warning(self, "警告", "请先选择一个视频")
+            return
+
+        # 确认删除
+        video_name = os.path.basename(video_path)
+        reply = QMessageBox.question(
+            self,
+            "确认批量删除",
+            f"确定要删除视频 '{video_name}' 的所有裁剪吗？\n这将从数据库中删除所有相关记录，并同时删除所有图像文件。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        # 获取该视频的所有裁剪
+        crops = self.database.get_crops(video_path)
+        if not crops:
+            QMessageBox.information(self, "提示", "没有找到该视频的裁剪")
+            return
+
+        # 删除所有图像文件
+        deleted_files = 0
+        for crop in crops:
+            image_path = crop["crop_image_path"]
+            try:
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+                    deleted_files += 1
+            except Exception as e:
+                print(f"删除图像文件失败: {e}")
+
+        # 删除数据库记录
+        deleted_records = self.database.delete_crops_by_video(video_path)
+
+        # 显示结果
+        QMessageBox.information(
+            self,
+            "删除完成",
+            f"已删除 {deleted_records} 条记录和 {deleted_files} 个图像文件"
+        )
+
+        # 刷新结果
+        self.refresh_results()
 
     def open_output_dir(self):
         """打开输出目录"""
