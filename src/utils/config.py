@@ -8,7 +8,7 @@ from pathlib import Path
 
 class Config:
     """配置管理类"""
-    
+
     DEFAULT_CONFIG = {
         # 视频处理配置
         "processing": {
@@ -19,6 +19,9 @@ class Config:
             "similarity_threshold": 0.9,  # 相似帧阈值
             "crop_padding": 0.2,  # 裁剪时额外添加的边距（相对于人脸大小的比例）
             "crop_aspect_ratio": 1.0,  # 裁剪的宽高比
+            "min_face_size": 40,  # 最小人脸尺寸（像素）
+            "auto_face_grouping": True,  # 是否自动对人脸进行分组
+            "face_similarity_threshold": 0.6,  # 人脸相似度阈值
         },
         # 输出配置
         "output": {
@@ -34,22 +37,23 @@ class Config:
         "ui": {
             "theme": "system",  # 主题：light, dark, system
             "thumbnail_size": 150,  # 缩略图大小
+            "default_player": "",  # 默认视频播放器路径
         }
     }
-    
+
     def __init__(self):
         """初始化配置"""
         self.app_dir = self._get_app_dir()
         self.config_path = os.path.join(self.app_dir, "config.json")
         self.config = self._load_config()
-    
+
     def _get_app_dir(self):
         """获取应用程序数据目录"""
         home = Path.home()
         app_dir = os.path.join(home, ".vid2img-cropper")
         os.makedirs(app_dir, exist_ok=True)
         return app_dir
-    
+
     def _load_config(self):
         """加载配置文件，如果不存在则创建默认配置"""
         if os.path.exists(self.config_path):
@@ -67,7 +71,7 @@ class Config:
             # 创建默认配置文件
             self.save_config(self.DEFAULT_CONFIG)
             return self.DEFAULT_CONFIG.copy()
-    
+
     def _deep_update(self, d, u):
         """递归更新嵌套字典"""
         for k, v in u.items():
@@ -75,7 +79,7 @@ class Config:
                 self._deep_update(d[k], v)
             else:
                 d[k] = v
-    
+
     def save_config(self, config=None):
         """保存配置到文件"""
         if config is None:
@@ -85,28 +89,28 @@ class Config:
                 json.dump(config, f, indent=4)
         except Exception as e:
             print(f"保存配置文件失败: {e}")
-    
+
     def get(self, section, key, default=None):
         """获取配置项"""
         try:
             return self.config[section][key]
         except KeyError:
             return default
-    
+
     def set(self, section, key, value):
         """设置配置项"""
         if section not in self.config:
             self.config[section] = {}
         self.config[section][key] = value
         self.save_config()
-    
+
     def get_database_path(self):
         """获取数据库路径"""
         db_path = self.get("database", "path")
         if not db_path:
             db_path = os.path.join(self.app_dir, "crops.db")
         return db_path
-    
+
     def get_output_dir(self):
         """获取输出目录"""
         output_dir = self.get("output", "output_dir")

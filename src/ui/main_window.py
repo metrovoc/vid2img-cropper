@@ -216,6 +216,19 @@ class MainWindow(QMainWindow):
 
         options_layout.addRow("裁剪宽高比:", self.aspect_ratio_combo)
 
+        # 最小人脸尺寸
+        self.min_face_size_spin = QSpinBox()
+        self.min_face_size_spin.setRange(20, 200)
+        self.min_face_size_spin.setSingleStep(5)
+        self.min_face_size_spin.setValue(self.config.get("processing", "min_face_size", 40))
+        self.min_face_size_spin.setToolTip("小于此尺寸的人脸将被忽略，避免裁剪过小不清晰的人脸")
+        options_layout.addRow("最小人脸尺寸:", self.min_face_size_spin)
+
+        # 自动人脸分组
+        self.auto_face_grouping_check = QCheckBox()
+        self.auto_face_grouping_check.setChecked(self.config.get("processing", "auto_face_grouping", True))
+        options_layout.addRow("自动人脸分组:", self.auto_face_grouping_check)
+
         # 输出格式
         self.format_combo = QComboBox()
         self.format_combo.addItem("JPEG (.jpg)", "jpg")
@@ -327,6 +340,19 @@ class MainWindow(QMainWindow):
         self.thumbnail_size_spin.valueChanged.connect(lambda v: self.config.set("ui", "thumbnail_size", v))
         ui_layout.addRow("缩略图大小:", self.thumbnail_size_spin)
 
+        # 默认视频播放器
+        player_layout = QHBoxLayout()
+        self.default_player_edit = QLineEdit()
+        self.default_player_edit.setText(self.config.get("ui", "default_player", ""))
+        self.default_player_edit.setReadOnly(True)
+        player_layout.addWidget(self.default_player_edit)
+
+        self.default_player_button = QPushButton("浏览...")
+        self.default_player_button.clicked.connect(self.on_default_player_clicked)
+        player_layout.addWidget(self.default_player_button)
+
+        ui_layout.addRow("默认视频播放器:", player_layout)
+
         layout.addWidget(ui_group)
 
         # 关于信息
@@ -384,6 +410,25 @@ class MainWindow(QMainWindow):
             if dir_path:
                 self.output_dir_edit.setText(dir_path)
                 self.config.set("output", "output_dir", dir_path)
+
+    def on_default_player_clicked(self):
+        """默认播放器按钮点击处理"""
+        file_dialog = QFileDialog()
+        file_dialog.setFileMode(QFileDialog.ExistingFile)
+
+        # 设置文件过滤器，根据操作系统
+        if sys.platform == "darwin":  # macOS
+            file_dialog.setNameFilter("应用程序 (*.app);;所有文件 (*)")
+        elif sys.platform == "win32":  # Windows
+            file_dialog.setNameFilter("可执行文件 (*.exe);;所有文件 (*)")
+        else:  # Linux 或其他
+            file_dialog.setNameFilter("所有文件 (*)")
+
+        if file_dialog.exec():
+            file_path = file_dialog.selectedFiles()[0]
+            if file_path:
+                self.default_player_edit.setText(file_path)
+                self.config.set("ui", "default_player", file_path)
 
     def on_start_clicked(self):
         """开始按钮点击处理"""
@@ -489,6 +534,8 @@ class MainWindow(QMainWindow):
         self.config.set("processing", "similarity_threshold", self.similarity_spin.value())
         self.config.set("processing", "crop_padding", self.padding_spin.value())
         self.config.set("processing", "crop_aspect_ratio", self.aspect_ratio_combo.currentData())
+        self.config.set("processing", "min_face_size", self.min_face_size_spin.value())
+        self.config.set("processing", "auto_face_grouping", self.auto_face_grouping_check.isChecked())
 
         # 输出选项
         self.config.set("output", "format", self.format_combo.currentData())
@@ -496,6 +543,7 @@ class MainWindow(QMainWindow):
 
         # UI选项
         self.config.set("ui", "thumbnail_size", self.thumbnail_size_spin.value())
+        self.config.set("ui", "default_player", self.default_player_edit.text())
 
         self.status_bar.showMessage("设置已保存", 3000)
 
