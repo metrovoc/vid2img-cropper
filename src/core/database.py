@@ -226,12 +226,13 @@ class Database:
         conn.close()
         return [row[0] for row in rows]
 
-    def count_crops(self, video_path=None):
+    def count_crops(self, video_path=None, group_id=None):
         """
         计算裁剪记录数量
 
         Args:
             video_path: 可选，按视频路径筛选
+            group_id: 可选，按人脸分组筛选
 
         Returns:
             记录数量
@@ -241,10 +242,18 @@ class Database:
 
         query = "SELECT COUNT(*) FROM crops"
         params = []
+        where_clauses = []
 
         if video_path:
-            query += " WHERE video_path = ?"
+            where_clauses.append("video_path = ?")
             params.append(video_path)
+
+        if group_id is not None:
+            where_clauses.append("group_id = ?")
+            params.append(group_id)
+
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
 
         cursor.execute(query, params)
         count = cursor.fetchone()[0]
