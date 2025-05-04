@@ -208,6 +208,46 @@ class MainWindow(QMainWindow):
 
         options_layout.addRow("人脸检测器:", self.detector_type_combo)
 
+        # 人脸识别模型类型
+        self.face_recognition_model_combo = QComboBox()
+        self.face_recognition_model_combo.addItem("InsightFace (高精度)", "insightface")
+        self.face_recognition_model_combo.addItem("OpenCV (轻量级)", "opencv")
+
+        # 设置当前值
+        current_model = self.config.get("processing", "face_recognition_model", "insightface")
+        index = self.face_recognition_model_combo.findData(current_model)
+        if index >= 0:
+            self.face_recognition_model_combo.setCurrentIndex(index)
+
+        options_layout.addRow("人脸识别模型:", self.face_recognition_model_combo)
+
+        # InsightFace模型名称
+        self.face_model_name_combo = QComboBox()
+        self.face_model_name_combo.addItem("buffalo_l (高精度)", "buffalo_l")
+        self.face_model_name_combo.addItem("buffalo_m (中等精度)", "buffalo_m")
+        self.face_model_name_combo.addItem("buffalo_s (轻量级)", "buffalo_s")
+
+        # 设置当前值
+        current_model_name = self.config.get("processing", "face_recognition_model_name", "buffalo_l")
+        index = self.face_model_name_combo.findData(current_model_name)
+        if index >= 0:
+            self.face_model_name_combo.setCurrentIndex(index)
+
+        options_layout.addRow("InsightFace模型:", self.face_model_name_combo)
+
+        # 人脸聚类方法
+        self.face_clustering_method_combo = QComboBox()
+        self.face_clustering_method_combo.addItem("余弦相似度 (推荐)", "cosine")
+        self.face_clustering_method_combo.addItem("欧氏距离", "euclidean")
+
+        # 设置当前值
+        current_method = self.config.get("processing", "face_clustering_method", "cosine")
+        index = self.face_clustering_method_combo.findData(current_method)
+        if index >= 0:
+            self.face_clustering_method_combo.setCurrentIndex(index)
+
+        options_layout.addRow("人脸聚类方法:", self.face_clustering_method_combo)
+
         # 置信度阈值
         self.confidence_spin = QDoubleSpinBox()
         self.confidence_spin.setRange(0.1, 1.0)
@@ -674,6 +714,12 @@ class MainWindow(QMainWindow):
         self.config.set("processing", "crop_aspect_ratio", self.aspect_ratio_combo.currentData())
         self.config.set("processing", "min_face_size", self.min_face_size_spin.value())
         self.config.set("processing", "auto_face_grouping", self.auto_face_grouping_check.isChecked())
+
+        # 人脸识别相关选项
+        self.config.set("processing", "face_recognition_model", self.face_recognition_model_combo.currentData())
+        self.config.set("processing", "face_recognition_model_name", self.face_model_name_combo.currentData())
+        self.config.set("processing", "face_clustering_method", self.face_clustering_method_combo.currentData())
+        self.config.set("processing", "face_similarity_threshold", self.similarity_spin.value())
 
         # 输出选项
         self.config.set("output", "format", self.format_combo.currentData())

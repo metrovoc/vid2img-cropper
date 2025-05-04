@@ -57,3 +57,9 @@ $RECYCLE.BIN/
 *~
 .directory
 .Trash-*
+
+
+main.app/
+main.build/
+main.dist/
+main.onefile-build/

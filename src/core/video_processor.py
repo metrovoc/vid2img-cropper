@@ -11,10 +11,14 @@ from pathlib import Path
 from datetime import timedelta
 import io
 import math
+import logging
 from sklearn.metrics.pairwise import cosine_similarity
 from skimage.metrics import structural_similarity as ssim
 
 from src.core.face_detector import create_detector
+from src.core.face_recognizer import create_face_recognizer
+
+logger = logging.getLogger(__name__)
 
 
 class VideoProcessor:
@@ -73,24 +77,20 @@ class VideoProcessor:
     def _init_face_recognizer(self):
         """初始化人脸特征提取器"""
         if self.face_recognizer is None:
-            # 尝试加载OpenCV的人脸识别模型
+            # 获取配置的人脸识别模型类型
+            recognizer_type = self.config.get("processing", "face_recognition_model", "insightface")
+            model_name = self.config.get("processing", "face_recognition_model_name", "buffalo_l")
+
             try:
-                # 使用OpenCV的FaceRecognizerSF模型
-                model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                                        "models", "face_recognition_sface_2021dec.onnx")
-
-                # 如果模型不存在，尝试下载
-                if not os.path.exists(model_path):
-                    self._download_face_recognizer_model(model_path)
-
-                self.face_recognizer = cv2.FaceRecognizerSF.create(
-                    model_path,
-                    "",
-                    backend_id=cv2.dnn.DNN_BACKEND_DEFAULT,
-                    target_id=cv2.dnn.DNN_TARGET_CPU
+                # 创建人脸识别器
+                self.face_recognizer = create_face_recognizer(
+                    recognizer_type=recognizer_type,
+                    model_name=model_name,
+                    confidence_threshold=self.face_similarity_threshold
                 )
+                logger.info(f"使用 {recognizer_type} 人脸识别器初始化成功")
             except Exception as e:
-                print(f"初始化人脸特征提取器失败: {e}")
+                logger.error(f"初始化人脸特征提取器失败: {e}")
                 self.face_recognizer = None
                 self.auto_face_grouping = False
 
@@ -328,14 +328,12 @@ class VideoProcessor:
                     # 提取人脸区域用于特征提取
                     face_roi = frame[y:y+h, x:x+w]
                     if face_roi.size > 0:
-                        # 调整大小为模型所需的输入尺寸
-                        face_roi = cv2.resize(face_roi, (112, 112))
                         # 提取特征向量
-                        feature_vector = self.face_recognizer.feature(face_roi).flatten().tolist()
+                        feature_vector = self.face_recognizer.extract_feature(face_roi)
                         # 尝试分配到现有分组或创建新分组
                         group_id = self._assign_to_face_group(feature_vector, crop_path)
                 except Exception as e:
-                    print(f"提取人脸特征失败: {e}")
+                    logger.error(f"提取人脸特征失败: {e}")
 
             # 记录到数据库
             bounding_box = [int(x), int(y), int(w), int(h)]
@@ -380,32 +378,51 @@ class VideoProcessor:
                 sample_image_path=crop_image_path
             )
 
-        # 计算与现有分组的相似度
-        max_similarity = 0
-        best_group = None
+        # 获取相似度计算方法
+        similarity_method = self.config.get("processing", "face_clustering_method", "cosine")
 
+        # 计算与现有分组的相似度
+        similarities = []
         for group in face_groups:
             if group['feature_vector'] is None:
                 continue
 
-            # 计算余弦相似度
-            similarity = self._compute_face_similarity(feature_vector, group['feature_vector'])
+            # 使用人脸识别器计算相似度
+            if hasattr(self.face_recognizer, 'compute_similarity'):
+                similarity = self.face_recognizer.compute_similarity(
+                    feature_vector,
+                    group['feature_vector'],
+                    method=similarity_method
+                )
+            else:
+                # 回退到内部方法
+                similarity = self._compute_face_similarity(feature_vector, group['feature_vector'])
 
-            if similarity > max_similarity:
-                max_similarity = similarity
-                best_group = group
+            similarities.append((group['id'], similarity))
 
-        # 如果最大相似度超过阈值，分配到现有分组
-        if max_similarity >= self.face_similarity_threshold and best_group is not None:
-            return best_group['id']
+        # 按相似度排序
+        similarities.sort(key=lambda x: x[1], reverse=True)
+
+        # 获取最高相似度
+        if similarities:
+            best_group_id, max_similarity = similarities[0]
+
+            # 如果最大相似度超过阈值，分配到现有分组
+            if max_similarity >= self.face_similarity_threshold:
+                logger.debug(f"人脸分配到现有分组 {best_group_id}，相似度: {max_similarity:.4f}")
+                return best_group_id
+            else:
+                logger.debug(f"最高相似度 {max_similarity:.4f} 低于阈值 {self.face_similarity_threshold}，创建新分组")
 
         # 否则创建新分组
         group_name = f"人物 {len(face_groups) + 1}"
-        return self.database.add_face_group(
+        new_group_id = self.database.add_face_group(
             name=group_name,
             feature_vector=feature_vector,
             sample_image_path=crop_image_path
         )
+        logger.debug(f"创建新分组 {group_name}，ID: {new_group_id}")
+        return new_group_id
 
     def _compute_face_similarity(self, feature1, feature2):
         """
