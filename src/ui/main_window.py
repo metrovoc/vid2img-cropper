@@ -171,6 +171,21 @@ class MainWindow(QMainWindow):
         self.fps_spin.setValue(self.config.get("processing", "frames_per_second", 5))
         options_layout.addRow("每秒处理帧数:", self.fps_spin)
 
+        # 人脸检测器类型
+        self.detector_type_combo = QComboBox()
+        self.detector_type_combo.addItem("YuNet (通用人脸)", "yunet")
+        self.detector_type_combo.addItem("Anime (动漫人脸)", "anime")
+        self.detector_type_combo.addItem("YOLOv8 (高精度)", "yolov8")
+        self.detector_type_combo.addItem("SCRFD (高精度)", "scrfd")
+
+        # 设置当前值
+        current_detector = self.config.get("processing", "detector_type", "yunet")
+        index = self.detector_type_combo.findData(current_detector)
+        if index >= 0:
+            self.detector_type_combo.setCurrentIndex(index)
+
+        options_layout.addRow("人脸检测器:", self.detector_type_combo)
+
         # 置信度阈值
         self.confidence_spin = QDoubleSpinBox()
         self.confidence_spin.setRange(0.1, 1.0)
@@ -184,6 +199,19 @@ class MainWindow(QMainWindow):
         self.skip_similar_check.setChecked(self.config.get("processing", "skip_similar_frames", True))
         options_layout.addRow("跳过相似帧:", self.skip_similar_check)
 
+        # 帧相似度判断方法
+        self.similarity_method_combo = QComboBox()
+        self.similarity_method_combo.addItem("感知哈希 (pHash)", "phash")
+        self.similarity_method_combo.addItem("结构相似性 (SSIM)", "ssim")
+
+        # 设置当前值
+        current_method = self.config.get("processing", "similarity_method", "phash")
+        index = self.similarity_method_combo.findData(current_method)
+        if index >= 0:
+            self.similarity_method_combo.setCurrentIndex(index)
+
+        options_layout.addRow("相似度判断方法:", self.similarity_method_combo)
+
         # 相似度阈值
         self.similarity_spin = QDoubleSpinBox()
         self.similarity_spin.setRange(0.5, 1.0)
@@ -191,6 +219,12 @@ class MainWindow(QMainWindow):
         self.similarity_spin.setDecimals(2)
         self.similarity_spin.setValue(self.config.get("processing", "similarity_threshold", 0.9))
         options_layout.addRow("相似度阈值:", self.similarity_spin)
+
+        # 跳过相似人脸
+        self.skip_similar_faces_check = QCheckBox()
+        self.skip_similar_faces_check.setChecked(self.config.get("processing", "skip_similar_faces", True))
+        self.skip_similar_faces_check.setToolTip("跳过与上一帧中相似的人脸，避免重复裁剪")
+        options_layout.addRow("跳过相似人脸:", self.skip_similar_faces_check)
 
         # 裁剪边距
         self.padding_spin = QDoubleSpinBox()
@@ -529,9 +563,12 @@ class MainWindow(QMainWindow):
         # 处理选项
         self.config.set("processing", "detection_width", self.detection_width_spin.value())
         self.config.set("processing", "frames_per_second", self.fps_spin.value())
+        self.config.set("processing", "detector_type", self.detector_type_combo.currentData())
         self.config.set("processing", "confidence_threshold", self.confidence_spin.value())
         self.config.set("processing", "skip_similar_frames", self.skip_similar_check.isChecked())
+        self.config.set("processing", "similarity_method", self.similarity_method_combo.currentData())
         self.config.set("processing", "similarity_threshold", self.similarity_spin.value())
+        self.config.set("processing", "skip_similar_faces", self.skip_similar_faces_check.isChecked())
         self.config.set("processing", "crop_padding", self.padding_spin.value())
         self.config.set("processing", "crop_aspect_ratio", self.aspect_ratio_combo.currentData())
         self.config.set("processing", "min_face_size", self.min_face_size_spin.value())

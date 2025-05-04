@@ -12,6 +12,7 @@ from datetime import timedelta
 import io
 import math
 from sklearn.metrics.pairwise import cosine_similarity
+from skimage.metrics import structural_similarity as ssim
 
 from src.core.face_detector import create_detector
 
@@ -48,6 +49,14 @@ class VideoProcessor:
         self.auto_face_grouping = config.get("processing", "auto_face_grouping", True)
         self.face_similarity_threshold = config.get("processing", "face_similarity_threshold", 0.6)
 
+        # 人脸去重相关配置
+        self.skip_similar_faces = config.get("processing", "skip_similar_faces", True)
+        self.face_iou_threshold = config.get("processing", "face_iou_threshold", 0.7)
+        self.face_appearance_threshold = config.get("processing", "face_appearance_threshold", 0.8)
+
+        # 存储上一帧检测到的人脸信息
+        self.last_frame_faces = []
+
         self.output_format = config.get("output", "format", "jpg")
         self.output_quality = config.get("output", "quality", 95)
         self.output_dir = config.get_output_dir()
@@ -55,8 +64,9 @@ class VideoProcessor:
     def _init_detector(self):
         """初始化人脸检测器"""
         if self.detector is None:
+            detector_type = self.config.get("processing", "detector_type", "yunet")
             self.detector = create_detector(
-                detector_type="yunet",
+                detector_type=detector_type,
                 confidence_threshold=self.confidence_threshold
             )
 
@@ -121,6 +131,7 @@ class VideoProcessor:
         self.processed_frames = 0
         self.detected_faces = 0
         self.last_frame_hash = None
+        self.last_frame_faces = []  # 重置人脸信息
 
         # 创建输出目录
         video_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -231,6 +242,10 @@ class VideoProcessor:
 
         # 将检测结果映射回原始分辨率
         scale_back = width / self.detection_width
+
+        # 存储当前帧的人脸信息，用于下一帧的相似度判断
+        current_frame_faces = []
+
         for i, face in enumerate(faces):
             x, y, w, h, confidence = face
 
@@ -243,6 +258,10 @@ class VideoProcessor:
             # 检查人脸尺寸是否过小
             if w < self.min_face_size or h < self.min_face_size:
                 continue  # 跳过过小的人脸
+
+            # 检查是否与上一帧的人脸太相似（位置和外观）
+            if self.skip_similar_faces and self._is_similar_face(frame, [x, y, w, h]):
+                continue  # 跳过相似人脸
 
             # 添加padding
             padding_x = int(w * self.crop_padding)
@@ -394,12 +413,152 @@ class VideoProcessor:
             similarity = cosine_similarity(f1, f2)[0][0]
             return float(similarity)
         except Exception as e:
-            print(f"计算人脸相似度失败: {e}")
+            print(f"计算人脸特征相似度失败: {e}")
             return 0.0
+
+    def _is_similar_face(self, frame, bbox):
+        """
+        判断当前人脸是否与上一帧中的某个人脸相似
+
+        Args:
+            frame: 当前帧
+            bbox: 当前人脸边界框 [x, y, w, h]
+
+        Returns:
+            是否相似
+        """
+        if not self.last_frame_faces:
+            # 如果没有上一帧的人脸信息，保存当前人脸并返回False
+            self.last_frame_faces.append({
+                'bbox': bbox,
+                'appearance': self._compute_face_appearance_hash(frame, bbox)
+            })
+            return False
+
+        # 计算当前人脸与上一帧所有人脸的IoU和外观相似度
+        x1, y1, w1, h1 = bbox
+        current_appearance = self._compute_face_appearance_hash(frame, bbox)
+
+        for face_info in self.last_frame_faces:
+            prev_bbox = face_info['bbox']
+            prev_appearance = face_info['appearance']
+
+            # 计算IoU
+            iou = self._compute_iou(bbox, prev_bbox)
+
+            # 如果IoU足够高，检查外观相似度
+            if iou >= self.face_iou_threshold:
+                # 计算外观相似度
+                appearance_similarity = 1 - (current_appearance - prev_appearance) / (8 * 8)  # 假设hash_size=8
+
+                # 如果外观也足够相似，认为是同一个人脸
+                if appearance_similarity >= self.face_appearance_threshold:
+                    # 更新人脸信息
+                    face_info['bbox'] = bbox
+                    face_info['appearance'] = current_appearance
+                    return True
+
+        # 如果没有找到相似的人脸，添加到列表中
+        self.last_frame_faces.append({
+            'bbox': bbox,
+            'appearance': current_appearance
+        })
+
+        # 限制列表大小，避免内存占用过大
+        if len(self.last_frame_faces) > 10:
+            self.last_frame_faces = self.last_frame_faces[-10:]
+
+        return False
+
+    def _compute_face_appearance_hash(self, frame, bbox, hash_size=8):
+        """
+        计算人脸区域的感知哈希
+
+        Args:
+            frame: 视频帧
+            bbox: 人脸边界框 [x, y, w, h]
+            hash_size: 哈希大小
+
+        Returns:
+            感知哈希
+        """
+        try:
+            x, y, w, h = bbox
+            # 提取人脸区域
+            face_roi = frame[y:y+h, x:x+w]
+            if face_roi.size == 0:
+                return imagehash.ImageHash(np.zeros((hash_size, hash_size), dtype=np.bool_))
+
+            # 转换为PIL图像
+            face_rgb = cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(face_rgb)
+
+            # 计算感知哈希
+            return imagehash.phash(pil_image, hash_size=hash_size)
+        except Exception as e:
+            print(f"计算人脸外观哈希失败: {e}")
+            return imagehash.ImageHash(np.zeros((hash_size, hash_size), dtype=np.bool_))
+
+    def _compute_iou(self, bbox1, bbox2):
+        """
+        计算两个边界框的IoU (Intersection over Union)
+
+        Args:
+            bbox1: 边界框1 [x, y, w, h]
+            bbox2: 边界框2 [x, y, w, h]
+
+        Returns:
+            IoU值 (0-1)
+        """
+        x1, y1, w1, h1 = bbox1
+        x2, y2, w2, h2 = bbox2
+
+        # 计算边界框的坐标
+        x1_1, y1_1, x2_1, y2_1 = x1, y1, x1 + w1, y1 + h1
+        x1_2, y1_2, x2_2, y2_2 = x2, y2, x2 + w2, y2 + h2
+
+        # 计算交集区域
+        xx1 = max(x1_1, x1_2)
+        yy1 = max(y1_1, y1_2)
+        xx2 = min(x2_1, x2_2)
+        yy2 = min(y2_1, y2_2)
+
+        # 计算交集面积
+        w = max(0, xx2 - xx1)
+        h = max(0, yy2 - yy1)
+        intersection = w * h
+
+        # 计算并集面积
+        area1 = w1 * h1
+        area2 = w2 * h2
+        union = area1 + area2 - intersection
+
+        # 计算IoU
+        iou = intersection / union if union > 0 else 0
+        return iou
 
     def _is_similar_to_previous(self, frame, hash_size=8):
         """
         检查当前帧是否与上一帧相似
+
+        Args:
+            frame: 当前帧
+            hash_size: 感知哈希大小
+
+        Returns:
+            是否相似
+        """
+        # 获取相似度判断方法
+        similarity_method = self.config.get("processing", "similarity_method", "phash")
+
+        if similarity_method == "ssim":
+            return self._is_similar_ssim(frame)
+        else:  # 默认使用感知哈希
+            return self._is_similar_phash(frame, hash_size)
+
+    def _is_similar_phash(self, frame, hash_size=8):
+        """
+        使用感知哈希判断帧相似度
 
         Args:
             frame: 当前帧
@@ -424,6 +583,33 @@ class VideoProcessor:
 
         # 如果相似度高于阈值，认为是相似帧
         return similarity >= self.similarity_threshold
+
+    def _is_similar_ssim(self, frame):
+        """
+        使用结构相似性(SSIM)判断帧相似度
+
+        Args:
+            frame: 当前帧
+
+        Returns:
+            是否相似
+        """
+        if not hasattr(self, 'last_frame'):
+            # 第一帧，保存并返回False
+            self.last_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            return False
+
+        # 转换为灰度图
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # 计算SSIM
+        similarity_index, _ = ssim(self.last_frame, gray, full=True)
+
+        # 更新上一帧
+        self.last_frame = gray
+
+        # 如果相似度高于阈值，认为是相似帧
+        return similarity_index >= self.similarity_threshold
 
     def _compute_frame_hash(self, frame, hash_size=8):
         """

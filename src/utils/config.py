@@ -14,14 +14,19 @@ class Config:
         "processing": {
             "detection_width": 640,  # 检测用的缩放宽度
             "frames_per_second": 5,  # 每秒处理的帧数
+            "detector_type": "yunet",  # 人脸检测器类型: yunet, anime, yolov8, scrfd
             "confidence_threshold": 0.6,  # 人脸检测置信度阈值
             "skip_similar_frames": True,  # 是否跳过相似帧
+            "similarity_method": "phash",  # 帧相似度判断方法: phash, ssim
             "similarity_threshold": 0.9,  # 相似帧阈值
             "crop_padding": 0.2,  # 裁剪时额外添加的边距（相对于人脸大小的比例）
             "crop_aspect_ratio": 1.0,  # 裁剪的宽高比
             "min_face_size": 40,  # 最小人脸尺寸（像素）
             "auto_face_grouping": True,  # 是否自动对人脸进行分组
-            "face_similarity_threshold": 0.6,  # 人脸相似度阈值
+            "face_similarity_threshold": 0.6,  # 人脸特征向量相似度阈值
+            "skip_similar_faces": True,  # 是否跳过相似人脸
+            "face_iou_threshold": 0.7,  # 人脸IoU阈值
+            "face_appearance_threshold": 0.8,  # 人脸外观相似度阈值
         },
         # 输出配置
         "output": {
