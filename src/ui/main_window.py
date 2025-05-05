@@ -133,6 +133,11 @@ class MainWindow(QMainWindow):
         """初始化处理选项卡"""
         layout = QVBoxLayout(self.processing_tab)
 
+        # 创建主分割器，允许用户调整各区域大小
+        main_splitter = QSplitter(Qt.Vertical)
+        main_splitter.setHandleWidth(2)
+        main_splitter.setChildrenCollapsible(False)
+
         # 文件选择区域
         file_group = QGroupBox("视频文件队列")
         file_layout = QVBoxLayout(file_group)
@@ -175,7 +180,8 @@ class MainWindow(QMainWindow):
         self.file_info_label = QLabel("未选择文件")
         file_layout.addWidget(self.file_info_label)
 
-        layout.addWidget(file_group)
+        # 将文件选择区域添加到主分割器
+        main_splitter.addWidget(file_group)
 
         # 处理选项区域
         options_group = QGroupBox("处理选项")
@@ -385,11 +391,18 @@ class MainWindow(QMainWindow):
 
         options_layout.addRow("输出质量:", quality_layout)
 
-        layout.addWidget(options_group)
+        # 将处理选项区域添加到主分割器
+        main_splitter.addWidget(options_group)
 
         # 进度区域
         progress_group = QGroupBox("处理进度")
+        # 设置大小策略为垂直最小
+        progress_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        # 设置最大高度
+        progress_group.setMaximumHeight(100)
         progress_layout = QVBoxLayout(progress_group)
+        progress_layout.setContentsMargins(12, 0, 12, 0)
+        progress_layout.setSpacing(0)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -402,10 +415,13 @@ class MainWindow(QMainWindow):
         self.stats_label = QLabel("")
         progress_layout.addWidget(self.stats_label)
 
-        layout.addWidget(progress_group)
+        # 将进度区域添加到主分割器
+        main_splitter.addWidget(progress_group)
 
         # 按钮区域
-        button_layout = QHBoxLayout()
+        buttons_widget = QWidget()
+        button_layout = QHBoxLayout(buttons_widget)
+        button_layout.setContentsMargins(0, 0, 0, 0)
 
         self.start_button = QPushButton("开始处理")
         self.start_button.clicked.connect(self.on_start_clicked)
@@ -416,7 +432,14 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         button_layout.addWidget(self.stop_button)
 
-        layout.addLayout(button_layout)
+        # 将按钮区域添加到主分割器
+        main_splitter.addWidget(buttons_widget)
+
+        # 设置分割器初始比例 (文件选择:处理选项:进度:按钮)
+        main_splitter.setSizes([200, 400, 100, 50])
+
+        # 将主分割器添加到主布局
+        layout.addWidget(main_splitter)
 
         # 添加弹性空间
         layout.addStretch()

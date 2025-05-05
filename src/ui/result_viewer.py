@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QComboBox, QFileDialog,
     QMessageBox, QSplitter, QGroupBox, QFormLayout, QSpinBox,
     QScrollArea, QGridLayout, QMenu, QApplication, QDialog, QLineEdit,
-    QTabWidget, QStackedWidget
+    QTabWidget, QStackedWidget, QSizePolicy
 )
 from PySide6.QtCore import Qt, QSize, QUrl, QProcess, Signal, QThread
 from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QAction
@@ -220,8 +220,17 @@ class ResultViewer(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
+        # 创建主分割器，允许用户调整各区域大小
+        main_splitter = QSplitter(Qt.Vertical)
+        main_splitter.setHandleWidth(2)
+        main_splitter.setChildrenCollapsible(False)
+
         # 顶部控制区域
         control_group = QGroupBox("控制面板")
+        # 设置大小策略为垂直最小
+        control_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        # 设置最大高度
+        control_group.setMaximumHeight(120)
         control_layout = QHBoxLayout(control_group)
         control_layout.setContentsMargins(12, 16, 12, 12)
         control_layout.setSpacing(12)
@@ -299,7 +308,8 @@ class ResultViewer(QWidget):
         control_layout.setStretch(0, 3)  # 左侧占比更大
         control_layout.setStretch(1, 2)  # 右侧占比较小
 
-        layout.addWidget(control_group)
+        # 将控制面板添加到主分割器
+        main_splitter.addWidget(control_group)
 
         # 主内容区域
         content_widget = QWidget()
@@ -470,18 +480,32 @@ class ResultViewer(QWidget):
         splitter.setSizes([700, 300])
 
         content_layout.addWidget(splitter)
-        layout.addWidget(content_widget)
+
+        # 将主内容区域添加到主分割器
+        main_splitter.addWidget(content_widget)
 
         # 状态区域
         status_group = QGroupBox("状态")
+        # 设置大小策略为垂直最小
+        status_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        # 设置最大高度
+        status_group.setMaximumHeight(60)
         status_layout = QVBoxLayout(status_group)
         status_layout.setContentsMargins(12, 16, 12, 12)
+        status_layout.setSpacing(4)
 
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("font-weight: 500;")
         status_layout.addWidget(self.status_label)
 
-        layout.addWidget(status_group)
+        # 将状态区域添加到主分割器
+        main_splitter.addWidget(status_group)
+
+        # 设置分割器初始比例 (控制面板:主内容:状态)
+        main_splitter.setSizes([100, 600, 40])
+
+        # 将主分割器添加到主布局
+        layout.addWidget(main_splitter)
 
         # 初始化右键菜单
         self.init_context_menu()
