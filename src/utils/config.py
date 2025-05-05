@@ -25,7 +25,7 @@ class Config:
             "auto_face_grouping": True,  # 是否自动对人脸进行分组
             "face_recognition_model": "insightface",  # 人脸识别模型类型: insightface, opencv
             "face_recognition_model_name": "buffalo_l",  # InsightFace模型名称: buffalo_l, buffalo_m, buffalo_s
-            "face_similarity_threshold": 0.6,  # 人脸特征向量相似度阈值
+            "face_similarity_threshold": 0.85,  # 人脸特征向量相似度阈值
             "face_clustering_method": "cosine",  # 人脸聚类方法: cosine, euclidean
             "skip_similar_faces": True,  # 是否跳过相似人脸
             "face_iou_threshold": 0.7,  # 人脸IoU阈值

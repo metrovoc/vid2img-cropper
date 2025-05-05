@@ -534,6 +534,24 @@ class Database:
 
         return deleted_count
 
+    def reset_all_crop_groups(self):
+        """
+        重置所有裁剪记录的分组关联
+
+        Returns:
+            重置的记录数量
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("UPDATE crops SET group_id = NULL")
+        reset_count = cursor.rowcount
+
+        conn.commit()
+        conn.close()
+
+        return reset_count
+
     def assign_crop_to_group(self, crop_id, group_id):
         """
         将裁剪记录分配到指定分组

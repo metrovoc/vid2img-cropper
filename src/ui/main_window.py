@@ -308,14 +308,15 @@ class MainWindow(QMainWindow):
 
         options_layout.addRow("相似度判断方法:", self.similarity_method_combo)
 
-        # 相似度阈值
+        # 帧相似度阈值
         self.similarity_spin = QDoubleSpinBox()
         self.similarity_spin.setRange(0.5, 1.0)
         self.similarity_spin.setSingleStep(0.05)
         self.similarity_spin.setDecimals(2)
         self.similarity_spin.setMinimumHeight(28)  # 增加控件高度
         self.similarity_spin.setValue(self.config.get("processing", "similarity_threshold", 0.9))
-        options_layout.addRow("相似度阈值:", self.similarity_spin)
+        self.similarity_spin.setToolTip("帧相似度阈值，用于判断两帧是否相似，值越高要求越严格")
+        options_layout.addRow("帧相似度阈值:", self.similarity_spin)
 
         # 跳过相似人脸
         self.skip_similar_faces_check = QCheckBox()
@@ -362,6 +363,16 @@ class MainWindow(QMainWindow):
         self.auto_face_grouping_check = QCheckBox()
         self.auto_face_grouping_check.setChecked(self.config.get("processing", "auto_face_grouping", True))
         options_layout.addRow("自动人脸分组:", self.auto_face_grouping_check)
+
+        # 人脸相似度阈值
+        self.face_similarity_spin = QDoubleSpinBox()
+        self.face_similarity_spin.setRange(0.5, 0.98)
+        self.face_similarity_spin.setSingleStep(0.05)
+        self.face_similarity_spin.setDecimals(2)
+        self.face_similarity_spin.setMinimumHeight(28)  # 增加控件高度
+        self.face_similarity_spin.setValue(self.config.get("processing", "face_similarity_threshold", 0.85))
+        self.face_similarity_spin.setToolTip("人脸特征相似度阈值，用于判断两个人脸是否为同一人，值越高要求越严格\nInsightFace建议使用0.85-0.9，OpenCV建议使用0.6-0.7")
+        options_layout.addRow("人脸相似度阈值:", self.face_similarity_spin)
 
         # 输出格式
         self.format_combo = QComboBox()
@@ -775,7 +786,7 @@ class MainWindow(QMainWindow):
         self.config.set("processing", "face_recognition_model", self.face_recognition_model_combo.currentData())
         self.config.set("processing", "face_recognition_model_name", self.face_model_name_combo.currentData())
         self.config.set("processing", "face_clustering_method", self.face_clustering_method_combo.currentData())
-        self.config.set("processing", "face_similarity_threshold", self.similarity_spin.value())
+        self.config.set("processing", "face_similarity_threshold", self.face_similarity_spin.value())
 
         # 输出选项
         self.config.set("output", "format", self.format_combo.currentData())

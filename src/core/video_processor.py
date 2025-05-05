@@ -103,10 +103,56 @@ class VideoProcessor:
                     **params
                 )
                 logger.info(f"使用 {recognizer_type} 人脸识别器初始化成功")
+
+                # 检查是否需要清理数据库中的特征向量
+                # 如果从OpenCV切换到InsightFace或反之，特征向量维度会不同
+                self._check_and_clean_feature_vectors(recognizer_type)
             except Exception as e:
                 logger.error(f"初始化人脸特征提取器失败: {e}")
                 self.face_recognizer = None
                 self.auto_face_grouping = False
+
+    def _check_and_clean_feature_vectors(self, recognizer_type):
+        """
+        检查并清理数据库中的特征向量，确保与当前识别器兼容
+
+        Args:
+            recognizer_type: 当前使用的识别器类型
+        """
+        try:
+            # 获取所有人脸分组
+            face_groups = self.database.get_face_groups()
+            if not face_groups:
+                return
+
+            # 检查第一个分组的特征向量维度
+            first_group = face_groups[0]
+            if first_group['feature_vector'] is None:
+                return
+
+            # 获取特征向量维度
+            vector_dim = len(first_group['feature_vector'])
+
+            # 检查是否与当前识别器匹配
+            expected_dim = 512 if recognizer_type.lower() == "insightface" else 128
+
+            if vector_dim != expected_dim:
+                logger.warning(f"数据库中的特征向量维度 ({vector_dim}) 与当前识别器 ({recognizer_type}, {expected_dim}) 不匹配")
+                logger.warning("清理所有人脸分组的特征向量...")
+
+                # 清理所有分组的特征向量
+                for group in face_groups:
+                    self.database.update_face_group(
+                        group_id=group['id'],
+                        feature_vector=None
+                    )
+
+                # 重置所有裁剪记录的分组关联
+                self.database.reset_all_crop_groups()
+
+                logger.info("特征向量清理完成，所有人脸将重新分组")
+        except Exception as e:
+            logger.error(f"检查和清理特征向量失败: {e}")
 
     def _download_face_recognizer_model(self, save_path):
         """下载人脸特征提取模型"""
