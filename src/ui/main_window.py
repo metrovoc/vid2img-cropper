@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QFileDialog, QComboBox, QSpinBox, QDoubleSpinBox,
     QCheckBox, QTabWidget, QSplitter, QMessageBox, QGroupBox, QFormLayout,
-    QLineEdit, QSlider, QStatusBar, QApplication, QListWidget, QListWidgetItem
+    QLineEdit, QSlider, QStatusBar, QApplication, QListWidget, QListWidgetItem,
+    QScrollArea, QSizePolicy
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize, QUrl, QDir
 from PySide6.QtGui import QIcon, QPixmap, QDesktopServices
@@ -178,23 +179,45 @@ class MainWindow(QMainWindow):
 
         # 处理选项区域
         options_group = QGroupBox("处理选项")
-        options_layout = QFormLayout(options_group)
+        options_main_layout = QVBoxLayout(options_group)
+        options_main_layout.setContentsMargins(12, 16, 12, 12)
+
+        # 创建滚动区域
+        options_scroll = QScrollArea()
+        options_scroll.setWidgetResizable(True)
+        options_scroll.setFrameShape(QScrollArea.NoFrame)
+        options_scroll.setMinimumHeight(200)  # 设置最小高度
+        options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # 确保垂直滚动条可见
+        options_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # 允许滚动区域扩展
+
+        # 创建内容小部件
+        options_content = QWidget()
+        options_layout = QFormLayout(options_content)
+        options_layout.setContentsMargins(0, 0, 0, 0)
+        options_layout.setSpacing(10)  # 增加表单项之间的间距
+
+        # 设置滚动区域的内容
+        options_scroll.setWidget(options_content)
+        options_main_layout.addWidget(options_scroll)
 
         # 检测宽度
         self.detection_width_spin = QSpinBox()
         self.detection_width_spin.setRange(320, 1920)
         self.detection_width_spin.setSingleStep(80)
         self.detection_width_spin.setValue(self.config.get("processing", "detection_width", 640))
+        self.detection_width_spin.setMinimumHeight(28)  # 增加控件高度
         options_layout.addRow("检测宽度:", self.detection_width_spin)
 
         # 每秒处理帧数
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(1, 30)
         self.fps_spin.setValue(self.config.get("processing", "frames_per_second", 5))
+        self.fps_spin.setMinimumHeight(28)  # 增加控件高度
         options_layout.addRow("每秒处理帧数:", self.fps_spin)
 
         # 人脸检测器类型
         self.detector_type_combo = QComboBox()
+        self.detector_type_combo.setMinimumHeight(28)  # 增加控件高度
         self.detector_type_combo.addItem("YuNet (通用人脸)", "yunet")
         self.detector_type_combo.addItem("Anime (动漫人脸)", "anime")
         self.detector_type_combo.addItem("YOLOv8 (高精度)", "yolov8")
@@ -210,6 +233,7 @@ class MainWindow(QMainWindow):
 
         # 人脸识别模型类型
         self.face_recognition_model_combo = QComboBox()
+        self.face_recognition_model_combo.setMinimumHeight(28)  # 增加控件高度
         self.face_recognition_model_combo.addItem("InsightFace (高精度)", "insightface")
         self.face_recognition_model_combo.addItem("OpenCV (轻量级)", "opencv")
 
@@ -223,6 +247,7 @@ class MainWindow(QMainWindow):
 
         # InsightFace模型名称
         self.face_model_name_combo = QComboBox()
+        self.face_model_name_combo.setMinimumHeight(28)  # 增加控件高度
         self.face_model_name_combo.addItem("buffalo_l (高精度)", "buffalo_l")
         self.face_model_name_combo.addItem("buffalo_m (中等精度)", "buffalo_m")
         self.face_model_name_combo.addItem("buffalo_s (轻量级)", "buffalo_s")
@@ -237,6 +262,7 @@ class MainWindow(QMainWindow):
 
         # 人脸聚类方法
         self.face_clustering_method_combo = QComboBox()
+        self.face_clustering_method_combo.setMinimumHeight(28)  # 增加控件高度
         self.face_clustering_method_combo.addItem("余弦相似度 (推荐)", "cosine")
         self.face_clustering_method_combo.addItem("欧氏距离", "euclidean")
 
@@ -253,6 +279,7 @@ class MainWindow(QMainWindow):
         self.confidence_spin.setRange(0.1, 1.0)
         self.confidence_spin.setSingleStep(0.05)
         self.confidence_spin.setDecimals(2)
+        self.confidence_spin.setMinimumHeight(28)  # 增加控件高度
         self.confidence_spin.setValue(self.config.get("processing", "confidence_threshold", 0.6))
         options_layout.addRow("置信度阈值:", self.confidence_spin)
 
@@ -263,6 +290,7 @@ class MainWindow(QMainWindow):
 
         # 帧相似度判断方法
         self.similarity_method_combo = QComboBox()
+        self.similarity_method_combo.setMinimumHeight(28)  # 增加控件高度
         self.similarity_method_combo.addItem("感知哈希 (pHash)", "phash")
         self.similarity_method_combo.addItem("结构相似性 (SSIM)", "ssim")
 
@@ -279,6 +307,7 @@ class MainWindow(QMainWindow):
         self.similarity_spin.setRange(0.5, 1.0)
         self.similarity_spin.setSingleStep(0.05)
         self.similarity_spin.setDecimals(2)
+        self.similarity_spin.setMinimumHeight(28)  # 增加控件高度
         self.similarity_spin.setValue(self.config.get("processing", "similarity_threshold", 0.9))
         options_layout.addRow("相似度阈值:", self.similarity_spin)
 
@@ -293,11 +322,13 @@ class MainWindow(QMainWindow):
         self.padding_spin.setRange(0.0, 1.0)
         self.padding_spin.setSingleStep(0.05)
         self.padding_spin.setDecimals(2)
+        self.padding_spin.setMinimumHeight(28)  # 增加控件高度
         self.padding_spin.setValue(self.config.get("processing", "crop_padding", 0.2))
         options_layout.addRow("裁剪边距:", self.padding_spin)
 
         # 裁剪宽高比
         self.aspect_ratio_combo = QComboBox()
+        self.aspect_ratio_combo.setMinimumHeight(28)  # 增加控件高度
         self.aspect_ratio_combo.addItem("1:1 (正方形)", 1.0)
         self.aspect_ratio_combo.addItem("4:3", 4/3)
         self.aspect_ratio_combo.addItem("3:4", 3/4)
@@ -316,6 +347,7 @@ class MainWindow(QMainWindow):
         self.min_face_size_spin = QSpinBox()
         self.min_face_size_spin.setRange(20, 200)
         self.min_face_size_spin.setSingleStep(5)
+        self.min_face_size_spin.setMinimumHeight(28)  # 增加控件高度
         self.min_face_size_spin.setValue(self.config.get("processing", "min_face_size", 40))
         self.min_face_size_spin.setToolTip("小于此尺寸的人脸将被忽略，避免裁剪过小不清晰的人脸")
         options_layout.addRow("最小人脸尺寸:", self.min_face_size_spin)
@@ -327,6 +359,7 @@ class MainWindow(QMainWindow):
 
         # 输出格式
         self.format_combo = QComboBox()
+        self.format_combo.setMinimumHeight(28)  # 增加控件高度
         self.format_combo.addItem("JPEG (.jpg)", "jpg")
         self.format_combo.addItem("PNG (.png)", "png")
         self.format_combo.addItem("WebP (.webp)", "webp")

@@ -338,6 +338,19 @@ class ResultViewer(QWidget):
         details_layout.setContentsMargins(0, 0, 0, 0)
         details_layout.setSpacing(12)
 
+        # 创建滚动区域来包裹所有详情内容
+        details_scroll = QScrollArea()
+        details_scroll.setWidgetResizable(True)
+        details_scroll.setFrameShape(QScrollArea.NoFrame)
+        details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        details_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        # 创建内容小部件
+        details_content = QWidget()
+        details_content_layout = QVBoxLayout(details_content)
+        details_content_layout.setContentsMargins(0, 0, 0, 0)
+        details_content_layout.setSpacing(12)
+
         # 详情组
         details_group = QGroupBox("详细信息")
         details_group.setMinimumWidth(300)
@@ -364,7 +377,7 @@ class ResultViewer(QWidget):
         self.detail_confidence.setTextInteractionFlags(Qt.TextSelectableByMouse)
         details_form.addRow("置信度:", self.detail_confidence)
 
-        details_layout.addWidget(details_group)
+        details_content_layout.addWidget(details_group)
 
         # 创建堆叠小部件，用于切换预览和视频播放器
         self.stacked_widget = QStackedWidget()
@@ -389,7 +402,7 @@ class ResultViewer(QWidget):
 
         # 创建视频播放器
         self.video_player = VideoPlayer()
-        self.video_player.setMinimumSize(300, 300)
+        self.video_player.setMinimumSize(300, 350)  # 增加高度以确保控制器可见
         self.video_player.playback_finished.connect(self.on_playback_finished)
 
         # 设置初始音量
@@ -407,11 +420,12 @@ class ResultViewer(QWidget):
 
         # 添加到布局
         preview_group = QGroupBox("预览/视频")
+        preview_group.setMinimumHeight(400)  # 确保有足够的高度
         preview_group_layout = QVBoxLayout(preview_group)
         preview_group_layout.setContentsMargins(12, 16, 12, 12)
         preview_group_layout.addWidget(self.stacked_widget)
 
-        details_layout.addWidget(preview_group)
+        details_content_layout.addWidget(preview_group)
 
         # 操作组
         actions_group = QGroupBox("操作")
@@ -442,10 +456,13 @@ class ResultViewer(QWidget):
         button_grid.addWidget(self.delete_crop_button, 1, 1)
 
         actions_layout.addLayout(button_grid)
-        details_layout.addWidget(actions_group)
+        details_content_layout.addWidget(actions_group)
 
-        # 添加弹性空间
-        details_layout.addStretch()
+        # 设置滚动区域的内容
+        details_scroll.setWidget(details_content)
+
+        # 添加滚动区域到详情布局
+        details_layout.addWidget(details_scroll)
 
         splitter.addWidget(details_widget)
 

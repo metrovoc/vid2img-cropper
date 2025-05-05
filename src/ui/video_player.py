@@ -68,11 +68,15 @@ class VideoPlayer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # 设置整体大小策略
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         # 视频显示区域
         self.video_widget.setStyleSheet("""
             background-color: #000000;
         """)
-        layout.addWidget(self.video_widget)
+        self.video_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.video_widget, 1)  # 设置拉伸因子为1，使视频区域占据所有可用空间
 
         # 控制面板容器
         controls_container = QWidget()
@@ -80,6 +84,9 @@ class VideoPlayer(QWidget):
             background-color: rgba(0, 0, 0, 0.7);
             border-top: 1px solid rgba(255, 255, 255, 0.1);
         """)
+        # 设置固定高度确保控制器始终可见且不会溢出
+        controls_container.setFixedHeight(80)
+        controls_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         controls_layout = QVBoxLayout(controls_container)
         controls_layout.setContentsMargins(8, 4, 8, 8)
         controls_layout.setSpacing(4)
@@ -87,29 +94,30 @@ class VideoPlayer(QWidget):
         # 进度条
         self.position_slider = QSlider(Qt.Horizontal)
         self.position_slider.setRange(0, 0)
+        self.position_slider.setMinimumHeight(20)  # 增加滑块高度使其更容易点击
         self.position_slider.sliderMoved.connect(self.set_position)
         self.position_slider.sliderPressed.connect(self.on_slider_pressed)
         self.position_slider.sliderReleased.connect(self.on_slider_released)
         self.position_slider.setStyleSheet("""
             QSlider::groove:horizontal {
-                height: 4px;
+                height: 6px;
                 background: rgba(255, 255, 255, 0.2);
-                border-radius: 2px;
+                border-radius: 3px;
                 border: none;
             }
 
             QSlider::handle:horizontal {
                 background: #2979ff;
                 border: none;
-                width: 12px;
-                height: 12px;
-                margin: -4px 0;
-                border-radius: 6px;
+                width: 16px;
+                height: 16px;
+                margin: -5px 0;
+                border-radius: 8px;
             }
 
             QSlider::sub-page:horizontal {
                 background: #2979ff;
-                border-radius: 2px;
+                border-radius: 3px;
             }
         """)
         controls_layout.addWidget(self.position_slider)
@@ -135,8 +143,8 @@ class VideoPlayer(QWidget):
                 background-color: rgba(255, 255, 255, 0.1);
             }
         """)
-        self.play_button.setIconSize(QSize(24, 24))
-        self.play_button.setFixedSize(32, 32)
+        self.play_button.setIconSize(QSize(28, 28))
+        self.play_button.setFixedSize(36, 36)
         bottom_controls.addWidget(self.play_button)
 
         # 停止按钮
@@ -155,8 +163,8 @@ class VideoPlayer(QWidget):
                 background-color: rgba(255, 255, 255, 0.1);
             }
         """)
-        self.stop_button.setIconSize(QSize(24, 24))
-        self.stop_button.setFixedSize(32, 32)
+        self.stop_button.setIconSize(QSize(28, 28))
+        self.stop_button.setFixedSize(36, 36)
         bottom_controls.addWidget(self.stop_button)
 
         # 当前时间
@@ -192,8 +200,8 @@ class VideoPlayer(QWidget):
                 background-color: rgba(255, 255, 255, 0.1);
             }
         """)
-        self.volume_button.setIconSize(QSize(20, 20))
-        self.volume_button.setFixedSize(28, 28)
+        self.volume_button.setIconSize(QSize(24, 24))
+        self.volume_button.setFixedSize(32, 32)
         volume_layout.addWidget(self.volume_button)
 
         # 音量滑块
@@ -201,27 +209,28 @@ class VideoPlayer(QWidget):
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(50)
         self.volume_slider.setMaximumWidth(80)
+        self.volume_slider.setMinimumHeight(20)  # 增加滑块高度使其更容易点击
         self.volume_slider.valueChanged.connect(self.set_volume)
         self.volume_slider.setStyleSheet("""
             QSlider::groove:horizontal {
-                height: 3px;
+                height: 4px;
                 background: rgba(255, 255, 255, 0.2);
-                border-radius: 1px;
+                border-radius: 2px;
                 border: none;
             }
 
             QSlider::handle:horizontal {
                 background: white;
                 border: none;
-                width: 10px;
-                height: 10px;
+                width: 12px;
+                height: 12px;
                 margin: -4px 0;
-                border-radius: 5px;
+                border-radius: 6px;
             }
 
             QSlider::sub-page:horizontal {
                 background: white;
-                border-radius: 1px;
+                border-radius: 2px;
             }
         """)
         volume_layout.addWidget(self.volume_slider)
