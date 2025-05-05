@@ -1103,14 +1103,20 @@ class ResultViewer(QWidget):
         rename_button = QPushButton("重命名")
         delete_button = QPushButton("删除分组")
         merge_button = QPushButton("合并分组")
+        delete_empty_button = QPushButton("删除空白分组")
         close_button = QPushButton("关闭")
 
         button_layout.addWidget(rename_button)
         button_layout.addWidget(delete_button)
         button_layout.addWidget(merge_button)
-        button_layout.addWidget(close_button)
+
+        # 添加第二行按钮
+        second_button_layout = QHBoxLayout()
+        second_button_layout.addWidget(delete_empty_button)
+        second_button_layout.addWidget(close_button)
 
         layout.addLayout(button_layout)
+        layout.addLayout(second_button_layout)
 
         # 连接信号
         def on_group_selected():
@@ -1233,11 +1239,44 @@ class ResultViewer(QWidget):
         delete_button.setEnabled(False)
         merge_button.setEnabled(False)
 
+        # 添加删除空白分组的功能
+        def on_delete_empty_groups():
+            # 获取空白分组
+            empty_groups = self.database.get_empty_face_groups()
+
+            if not empty_groups:
+                QMessageBox.information(dialog, "提示", "没有找到空白分组")
+                return
+
+            # 确认删除
+            reply = QMessageBox.question(
+                dialog,
+                "确认删除空白分组",
+                f"确定要删除所有空白分组吗？共找到 {len(empty_groups)} 个空白分组。",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.Yes:
+                # 删除所有空白分组
+                deleted_count = self.database.delete_empty_face_groups()
+
+                QMessageBox.information(
+                    dialog,
+                    "删除完成",
+                    f"已删除 {deleted_count} 个空白分组"
+                )
+
+                # 刷新列表
+                self.refresh_results()
+                dialog.accept()
+
         # 连接信号
         group_list.itemSelectionChanged.connect(on_group_selected)
         rename_button.clicked.connect(on_rename)
         delete_button.clicked.connect(on_delete)
         merge_button.clicked.connect(on_merge)
+        delete_empty_button.clicked.connect(on_delete_empty_groups)
         close_button.clicked.connect(dialog.accept)
 
         # 显示对话框

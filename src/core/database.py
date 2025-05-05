@@ -369,6 +369,40 @@ class Database:
         conn.close()
         return results
 
+    def get_empty_face_groups(self):
+        """
+        获取空白人脸分组（没有关联裁剪图像的分组）
+
+        Returns:
+            空白人脸分组列表
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # 查询没有关联裁剪图像的分组
+        cursor.execute("""
+            SELECT g.* FROM face_groups g
+            LEFT JOIN (
+                SELECT DISTINCT group_id FROM crops WHERE group_id IS NOT NULL
+            ) c ON g.id = c.group_id
+            WHERE c.group_id IS NULL
+            ORDER BY g.name
+        """)
+        rows = cursor.fetchall()
+
+        # 转换为字典列表
+        results = []
+        for row in rows:
+            item = dict(row)
+            # 将JSON字符串转换回Python对象
+            if item['feature_vector']:
+                item['feature_vector'] = json.loads(item['feature_vector'])
+            results.append(item)
+
+        conn.close()
+        return results
+
     def get_face_group(self, group_id):
         """
         获取指定ID的人脸分组
@@ -471,6 +505,34 @@ class Database:
         conn.close()
 
         return success
+
+    def delete_empty_face_groups(self):
+        """
+        删除所有空白人脸分组（没有关联裁剪图像的分组）
+
+        Returns:
+            删除的分组数量
+        """
+        # 获取所有空白分组
+        empty_groups = self.get_empty_face_groups()
+
+        if not empty_groups:
+            return 0
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # 删除所有空白分组
+        group_ids = [group['id'] for group in empty_groups]
+        placeholders = ','.join(['?'] * len(group_ids))
+
+        cursor.execute(f"DELETE FROM face_groups WHERE id IN ({placeholders})", group_ids)
+        deleted_count = cursor.rowcount
+
+        conn.commit()
+        conn.close()
+
+        return deleted_count
 
     def assign_crop_to_group(self, crop_id, group_id):
         """
