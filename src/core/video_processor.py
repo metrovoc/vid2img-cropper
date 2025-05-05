@@ -81,12 +81,26 @@ class VideoProcessor:
             recognizer_type = self.config.get("processing", "face_recognition_model", "insightface")
             model_name = self.config.get("processing", "face_recognition_model_name", "buffalo_l")
 
+            # 准备参数
+            params = {
+                "confidence_threshold": self.face_similarity_threshold
+            }
+
+            # 根据识别器类型添加特定参数
+            if recognizer_type.lower() == "insightface":
+                params["model_name"] = model_name
+                # InsightFace特有参数
+                det_size = (640, 640)  # 默认检测尺寸
+                params["det_size"] = det_size
+            elif recognizer_type.lower() == "opencv":
+                # OpenCV特有参数，如果有的话
+                pass
+
             try:
                 # 创建人脸识别器
                 self.face_recognizer = create_face_recognizer(
                     recognizer_type=recognizer_type,
-                    model_name=model_name,
-                    confidence_threshold=self.face_similarity_threshold
+                    **params
                 )
                 logger.info(f"使用 {recognizer_type} 人脸识别器初始化成功")
             except Exception as e:
