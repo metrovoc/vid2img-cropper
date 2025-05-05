@@ -30,6 +30,7 @@ class VideoProcessingThread(QThread):
     progress_updated = Signal(int, int, float, float, float, int, int)  # current, total, progress, elapsed, remaining, processed_frames, detected_faces
     status_updated = Signal(str)
     processing_finished = Signal(dict)
+    video_processed = Signal(int, dict)  # 单个视频处理完成信号，参数：视频索引，处理结果
 
     def __init__(self, video_processor, video_paths):
         """
@@ -42,12 +43,14 @@ class VideoProcessingThread(QThread):
         super().__init__()
         self.video_processor = video_processor
         self.video_paths = video_paths
+        self.current_index = 0  # 当前处理的视频索引
 
     def run(self):
         """运行线程"""
         results = []
 
         for i, video_path in enumerate(self.video_paths):
+            self.current_index = i
             self.status_updated.emit(f"处理视频 {i+1}/{len(self.video_paths)}: {os.path.basename(video_path)}")
 
             result = self.video_processor.process_video(
@@ -57,6 +60,9 @@ class VideoProcessingThread(QThread):
             )
 
             results.append(result)
+
+            # 发送单个视频处理完成信号
+            self.video_processed.emit(i, result)
 
             if not self.video_processor.running:
                 self.status_updated.emit("处理已停止")
@@ -875,6 +881,7 @@ class MainWindow(QMainWindow):
         self.processing_thread.progress_updated.connect(self.update_progress)
         self.processing_thread.status_updated.connect(self.update_status)
         self.processing_thread.processing_finished.connect(self.on_processing_finished)
+        self.processing_thread.video_processed.connect(self.on_video_processed)
 
         # 更新UI状态
         self.start_button.setEnabled(False)
@@ -926,9 +933,35 @@ class MainWindow(QMainWindow):
         """
         self.status_bar.showMessage(message)
 
+    def on_video_processed(self, index, result):
+        """
+        单个视频处理完成回调
+
+        Args:
+            index: 视频索引
+            result: 处理结果
+        """
+        # 从队列中移除已处理的视频
+        if index < self.queue_list.count():
+            # 获取处理结果信息
+            detected_faces = result.get("detected_faces", 0) if result.get("success", False) else 0
+
+            # 移除队列中的第一个项目
+            self.queue_list.takeItem(0)
+
+            # 更新队列信息
+            remaining = self.queue_list.count()
+            if remaining > 0:
+                self.file_info_label.setText(f"已处理完成一个视频，检测到 {detected_faces} 个人脸。队列中还有 {remaining} 个文件待处理")
+            else:
+                self.file_info_label.setText(f"已处理完成一个视频，检测到 {detected_faces} 个人脸。队列已清空")
+
+            # 刷新UI
+            QApplication.processEvents()
+
     def on_processing_finished(self, result):
         """
-        处理完成回调
+        所有视频处理完成回调
 
         Args:
             result: 处理结果
@@ -944,6 +977,10 @@ class MainWindow(QMainWindow):
 
         message = f"处理完成，共检测到 {total_faces} 个人脸。\n点击\"结果\"选项卡查看裁剪结果。"
         QMessageBox.information(self, "处理完成", message)
+
+        # 清空队列（如果还有剩余项目）
+        self.queue_list.clear()
+        self.file_info_label.setText("队列已清空")
 
         # 切换到结果选项卡
         self.tab_widget.setCurrentIndex(1)
