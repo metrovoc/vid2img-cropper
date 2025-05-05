@@ -9,7 +9,28 @@ Vid2Img Cropper - 视频人脸裁剪工具
 import os
 import sys
 import argparse
+import logging
 from pathlib import Path
+
+# 配置日志
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# 在导入其他模块之前设置InsightFace环境变量
+from src.utils.paths import set_insightface_env_vars
+from src.utils.insightface_patch import patch_insightface
+
+# 设置InsightFace环境变量
+insightface_dir = set_insightface_env_vars()
+logger.info(f"InsightFace模型目录: {insightface_dir}")
+
+# 应用InsightFace补丁
+patch_success = patch_insightface()
+if patch_success:
+    logger.info("成功应用InsightFace补丁，模型将下载到自定义目录")
+else:
+    logger.warning("未能应用InsightFace补丁，模型可能会下载到默认目录")
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon

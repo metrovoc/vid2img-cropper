@@ -216,6 +216,7 @@ class MainWindow(QMainWindow):
         self.detection_width_spin.setSingleStep(80)
         self.detection_width_spin.setValue(self.config.get("processing", "detection_width", 640))
         self.detection_width_spin.setMinimumHeight(28)  # 增加控件高度
+        self.detection_width_spin.setToolTip("视频帧缩放到此宽度进行人脸检测，值越大检测精度越高但速度越慢")
         options_layout.addRow("检测宽度:", self.detection_width_spin)
 
         # 每秒处理帧数
@@ -223,6 +224,7 @@ class MainWindow(QMainWindow):
         self.fps_spin.setRange(1, 30)
         self.fps_spin.setValue(self.config.get("processing", "frames_per_second", 5))
         self.fps_spin.setMinimumHeight(28)  # 增加控件高度
+        self.fps_spin.setToolTip("从视频中抽取帧的频率，值越高检测越全面但处理时间越长")
         options_layout.addRow("每秒处理帧数:", self.fps_spin)
 
         # 人脸检测器类型
@@ -232,6 +234,7 @@ class MainWindow(QMainWindow):
         self.detector_type_combo.addItem("Anime (动漫人脸)", "anime")
         self.detector_type_combo.addItem("YOLOv8 (高精度)", "yolov8")
         self.detector_type_combo.addItem("SCRFD (高精度)", "scrfd")
+        self.detector_type_combo.setToolTip("选择人脸检测器类型：\n- YuNet: 通用人脸检测，速度和精度均衡\n- Anime: 专为动漫人脸优化\n- YOLOv8: 高精度通用人脸检测\n- SCRFD: 高精度人脸检测")
 
         # 设置当前值
         current_detector = self.config.get("processing", "detector_type", "yunet")
@@ -246,6 +249,7 @@ class MainWindow(QMainWindow):
         self.face_recognition_model_combo.setMinimumHeight(28)  # 增加控件高度
         self.face_recognition_model_combo.addItem("InsightFace (高精度)", "insightface")
         self.face_recognition_model_combo.addItem("OpenCV (轻量级)", "opencv")
+        self.face_recognition_model_combo.setToolTip("选择人脸识别模型类型：\n- InsightFace: 高精度人脸识别，支持更准确的人脸分组\n- OpenCV: 轻量级人脸识别，无需下载额外模型")
 
         # 设置当前值
         current_model = self.config.get("processing", "face_recognition_model", "insightface")
@@ -261,6 +265,7 @@ class MainWindow(QMainWindow):
         self.face_model_name_combo.addItem("buffalo_l (高精度)", "buffalo_l")
         self.face_model_name_combo.addItem("buffalo_m (中等精度)", "buffalo_m")
         self.face_model_name_combo.addItem("buffalo_s (轻量级)", "buffalo_s")
+        self.face_model_name_combo.setToolTip("选择InsightFace模型大小：\n- buffalo_l: 高精度模型，准确度最高但速度较慢\n- buffalo_m: 中等精度模型，平衡准确度和速度\n- buffalo_s: 轻量级模型，速度最快但准确度较低")
 
         # 设置当前值
         current_model_name = self.config.get("processing", "face_recognition_model_name", "buffalo_l")
@@ -275,6 +280,7 @@ class MainWindow(QMainWindow):
         self.face_clustering_method_combo.setMinimumHeight(28)  # 增加控件高度
         self.face_clustering_method_combo.addItem("余弦相似度 (推荐)", "cosine")
         self.face_clustering_method_combo.addItem("欧氏距离", "euclidean")
+        self.face_clustering_method_combo.setToolTip("选择人脸特征向量的相似度计算方法：\n- 余弦相似度: 计算向量夹角，对尺度不敏感，通常效果更好\n- 欧氏距离: 计算向量间的直线距离")
 
         # 设置当前值
         current_method = self.config.get("processing", "face_clustering_method", "cosine")
@@ -291,11 +297,13 @@ class MainWindow(QMainWindow):
         self.confidence_spin.setDecimals(2)
         self.confidence_spin.setMinimumHeight(28)  # 增加控件高度
         self.confidence_spin.setValue(self.config.get("processing", "confidence_threshold", 0.6))
+        self.confidence_spin.setToolTip("人脸检测的置信度阈值，值越高要求越严格，可减少误检但可能漏检")
         options_layout.addRow("置信度阈值:", self.confidence_spin)
 
         # 跳过相似帧
         self.skip_similar_check = QCheckBox()
         self.skip_similar_check.setChecked(self.config.get("processing", "skip_similar_frames", True))
+        self.skip_similar_check.setToolTip("启用后会跳过与前一帧相似的视频帧，可减少重复处理")
         options_layout.addRow("跳过相似帧:", self.skip_similar_check)
 
         # 帧相似度判断方法
@@ -303,6 +311,7 @@ class MainWindow(QMainWindow):
         self.similarity_method_combo.setMinimumHeight(28)  # 增加控件高度
         self.similarity_method_combo.addItem("感知哈希 (pHash)", "phash")
         self.similarity_method_combo.addItem("结构相似性 (SSIM)", "ssim")
+        self.similarity_method_combo.setToolTip("选择判断帧相似度的方法：\n- 感知哈希: 速度快，对光照变化不敏感\n- 结构相似性: 更精确但计算量大")
 
         # 设置当前值
         current_method = self.config.get("processing", "similarity_method", "phash")
@@ -335,6 +344,7 @@ class MainWindow(QMainWindow):
         self.padding_spin.setDecimals(2)
         self.padding_spin.setMinimumHeight(28)  # 增加控件高度
         self.padding_spin.setValue(self.config.get("processing", "crop_padding", 0.2))
+        self.padding_spin.setToolTip("裁剪人脸时额外添加的边距比例，值越大保留的周围区域越多")
         options_layout.addRow("裁剪边距:", self.padding_spin)
 
         # 裁剪宽高比
@@ -345,6 +355,7 @@ class MainWindow(QMainWindow):
         self.aspect_ratio_combo.addItem("3:4", 3/4)
         self.aspect_ratio_combo.addItem("16:9", 16/9)
         self.aspect_ratio_combo.addItem("9:16", 9/16)
+        self.aspect_ratio_combo.setToolTip("裁剪图像的宽高比，选择适合您需求的比例")
 
         # 设置当前值
         current_ratio = self.config.get("processing", "crop_aspect_ratio", 1.0)
@@ -366,6 +377,7 @@ class MainWindow(QMainWindow):
         # 自动人脸分组
         self.auto_face_grouping_check = QCheckBox()
         self.auto_face_grouping_check.setChecked(self.config.get("processing", "auto_face_grouping", True))
+        self.auto_face_grouping_check.setToolTip("启用后会自动将相似人脸归为同一组，便于后续浏览和管理")
         options_layout.addRow("自动人脸分组:", self.auto_face_grouping_check)
 
         # 人脸相似度阈值
@@ -384,6 +396,7 @@ class MainWindow(QMainWindow):
         self.format_combo.addItem("JPEG (.jpg)", "jpg")
         self.format_combo.addItem("PNG (.png)", "png")
         self.format_combo.addItem("WebP (.webp)", "webp")
+        self.format_combo.setToolTip("选择裁剪图像的保存格式：\n- JPEG: 体积小，有损压缩\n- PNG: 无损压缩，支持透明度\n- WebP: 更高压缩率，同时支持有损和无损")
 
         # 设置当前值
         current_format = self.config.get("output", "format", "jpg")
@@ -399,6 +412,7 @@ class MainWindow(QMainWindow):
         self.quality_slider.setValue(self.config.get("output", "quality", 95))
         self.quality_label = QLabel(f"{self.quality_slider.value()}%")
         self.quality_slider.valueChanged.connect(lambda v: self.quality_label.setText(f"{v}%"))
+        self.quality_slider.setToolTip("设置图像保存质量，值越高图像质量越好但文件体积越大")
 
         quality_layout = QHBoxLayout()
         quality_layout.addWidget(self.quality_slider)
@@ -505,6 +519,7 @@ class MainWindow(QMainWindow):
         self.thumbnail_size_spin.setSingleStep(10)
         self.thumbnail_size_spin.setValue(self.config.get("ui", "thumbnail_size", 150))
         self.thumbnail_size_spin.valueChanged.connect(lambda v: self.config.set("ui", "thumbnail_size", v))
+        self.thumbnail_size_spin.setToolTip("设置结果页面中缩略图的显示大小（像素）")
         ui_layout.addRow("缩略图大小:", self.thumbnail_size_spin)
 
         # 默认视频播放器
@@ -512,6 +527,7 @@ class MainWindow(QMainWindow):
         self.default_player_edit = QLineEdit()
         self.default_player_edit.setText(self.config.get("ui", "default_player", ""))
         self.default_player_edit.setReadOnly(True)
+        self.default_player_edit.setToolTip("设置用于打开视频的外部播放器路径")
         player_layout.addWidget(self.default_player_edit)
 
         self.default_player_button = QPushButton("浏览...")

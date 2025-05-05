@@ -12,7 +12,7 @@ import tempfile
 import zipfile
 import shutil
 
-from src.utils.paths import get_models_dir, get_insightface_models_dir
+from src.utils.paths import get_models_dir, get_insightface_models_dir, set_insightface_env_vars
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +222,9 @@ class InsightFaceRecognizer(FaceRecognizer):
             det_size: 检测尺寸
             **kwargs: 其他参数
         """
+        # 在导入InsightFace之前设置环境变量，确保模型下载到正确的位置
+        set_insightface_env_vars()
+
         super().__init__(model_path, model_name, confidence_threshold, **kwargs)
         self.det_size = det_size
         self.model = self._load_model()
@@ -332,6 +335,15 @@ class InsightFaceRecognizer(FaceRecognizer):
             # 模型文件路径
             model_file = os.path.join(model_dir, 'w600k_mbf.onnx')
 
+            # 确保环境变量已设置
+            insightface_home = os.environ.get('INSIGHTFACE_HOME', None)
+            if insightface_home:
+                logger.info(f"使用INSIGHTFACE_HOME环境变量: {insightface_home}")
+            else:
+                # 如果环境变量未设置，再次设置它
+                set_insightface_env_vars()
+                logger.info(f"重新设置INSIGHTFACE_HOME环境变量: {os.environ.get('INSIGHTFACE_HOME')}")
+
             # 尝试使用InsightFace的内置下载功能
             try:
                 import insightface
@@ -339,6 +351,7 @@ class InsightFaceRecognizer(FaceRecognizer):
                 from insightface.utils import download_onnx
 
                 logger.info("尝试使用InsightFace内置功能下载模型...")
+                # 指定下载目录为我们自定义的目录
                 download_onnx(model_name, model_dir)
                 if os.path.exists(model_file):
                     logger.info(f"模型下载成功: {model_file}")
