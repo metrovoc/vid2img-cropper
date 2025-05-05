@@ -372,12 +372,22 @@ class VideoProcessor:
             if existing_crop:
                 # 如果已存在相同图片，删除刚保存的图片并使用已存在的图片
                 try:
-                    os.remove(crop_path)
-                    print(f"检测到重复图片，使用已存在的图片: {existing_crop['crop_image_path']}")
-                    # 跳过后续处理
-                    continue
+                    # 确保原始图片存在
+                    if os.path.exists(existing_crop['crop_image_path']):
+                        # 删除新保存的重复图片
+                        os.remove(crop_path)
+                        print(f"检测到重复图片，使用已存在的图片: {existing_crop['crop_image_path']}")
+                        # 跳过后续处理
+                        continue
+                    else:
+                        # 如果原始图片不存在，保留新保存的图片并更新数据库记录
+                        print(f"原始图片不存在，保留新保存的图片: {crop_path}")
+                        # 更新数据库中的记录，指向新保存的图片
+                        self.database.update_crop_image_path(existing_crop['id'], crop_path)
+                        # 跳过后续处理，因为已经更新了数据库记录
+                        continue
                 except Exception as e:
-                    print(f"删除重复图片失败: {e}")
+                    print(f"处理重复图片失败: {e}")
 
             # 提取人脸特征向量
             feature_vector = None

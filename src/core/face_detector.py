@@ -349,7 +349,7 @@ class SCRFDFaceDetector(FaceDetector):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
         print("正在下载SCRFD人脸检测模型...")
-        model_url = "https://github.com/deepinsight/insightface/raw/master/model_zoo/scrfd/onnx/scrfd_10g_bnkps.onnx"
+        model_url = "https://huggingface.co/MonsterMMORPG/tools/resolve/main/scrfd_10g_bnkps.onnx"
 
         try:
             urllib.request.urlretrieve(model_url, save_path)

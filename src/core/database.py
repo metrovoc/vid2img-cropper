@@ -649,6 +649,35 @@ class Database:
         conn.close()
         return None
 
+    def update_crop_image_path(self, crop_id, new_image_path):
+        """
+        更新裁剪记录的图像路径和哈希值
+
+        Args:
+            crop_id: 裁剪记录ID
+            new_image_path: 新的图像路径
+
+        Returns:
+            是否成功
+        """
+        # 计算新图像的哈希值
+        new_hash = self.compute_image_hash(new_image_path)
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # 更新图像路径和哈希值
+        cursor.execute(
+            "UPDATE crops SET crop_image_path = ?, image_hash = ? WHERE id = ?",
+            (new_image_path, new_hash, crop_id)
+        )
+        success = cursor.rowcount > 0
+
+        conn.commit()
+        conn.close()
+
+        return success
+
     def compute_image_hash(self, image_path):
         """
         计算图像文件的哈希值
