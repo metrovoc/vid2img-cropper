@@ -8,6 +8,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 import logging
 import urllib.request
 import importlib.util
+import tempfile
+import zipfile
+import shutil
+
+from src.utils.paths import get_models_dir, get_insightface_models_dir
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +49,7 @@ class FaceRecognizer:
             return self.model_path
 
         # 默认模型路径
-        models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models")
+        models_dir = get_models_dir()
         default_path = os.path.join(models_dir, default_filename)
 
         # 如果模型不存在，尝试下载
@@ -270,7 +275,7 @@ class InsightFaceRecognizer(FaceRecognizer):
             from insightface.app import FaceAnalysis
 
             # 检查并确保模型目录存在
-            model_dir = os.path.join(os.path.expanduser('~'), '.insightface', 'models', self.model_name)
+            model_dir = os.path.join(get_insightface_models_dir(), self.model_name)
             os.makedirs(model_dir, exist_ok=True)
 
             # 检查是否有任何模型文件
@@ -321,7 +326,7 @@ class InsightFaceRecognizer(FaceRecognizer):
             logger.info(f"尝试下载InsightFace {model_name}模型...")
 
             # 获取模型目录
-            model_dir = os.path.join(os.path.expanduser('~'), '.insightface', 'models', model_name)
+            model_dir = os.path.join(get_insightface_models_dir(), model_name)
             os.makedirs(model_dir, exist_ok=True)
 
             # 模型文件路径
@@ -369,9 +374,26 @@ class InsightFaceRecognizer(FaceRecognizer):
                     urllib.request.urlretrieve(url, temp_path)
 
                     # 解压模型
-                    logger.info(f"正在解压模型到 {os.path.dirname(model_dir)}...")
+                    logger.info(f"正在解压模型到 {model_dir}...")
                     with zipfile.ZipFile(temp_path, 'r') as zip_ref:
-                        zip_ref.extractall(os.path.dirname(model_dir))
+                        # 创建临时目录用于解压
+                        temp_extract_dir = tempfile.mkdtemp()
+                        try:
+                            # 先解压到临时目录
+                            zip_ref.extractall(temp_extract_dir)
+
+                            # 查找解压后的模型文件
+                            for root, _, files in os.walk(temp_extract_dir):
+                                for file in files:
+                                    if file.endswith('.onnx'):
+                                        # 找到onnx文件，复制到目标目录
+                                        src_file = os.path.join(root, file)
+                                        dst_file = os.path.join(model_dir, file)
+                                        logger.info(f"复制模型文件: {src_file} -> {dst_file}")
+                                        shutil.copy2(src_file, dst_file)
+                        finally:
+                            # 清理临时目录
+                            shutil.rmtree(temp_extract_dir, ignore_errors=True)
 
                     if os.path.exists(model_file):
                         logger.info(f"模型下载并解压成功: {model_file}")
@@ -454,11 +476,11 @@ class InsightFaceRecognizer(FaceRecognizer):
                     if not hasattr(self, 'feature_model'):
                         # 尝试加载特征提取模型
                         # 首先尝试w600k_mbf.onnx (旧版本)
-                        model_path = os.path.join(os.path.expanduser('~'), '.insightface', 'models',
+                        model_path = os.path.join(get_insightface_models_dir(),
                                                  self.model_name, 'w600k_mbf.onnx')
                         # 如果不存在，尝试w600k_r50.onnx (新版本)
                         if not os.path.exists(model_path):
-                            alt_model_path = os.path.join(os.path.expanduser('~'), '.insightface', 'models',
+                            alt_model_path = os.path.join(get_insightface_models_dir(),
                                                         self.model_name, 'w600k_r50.onnx')
                             if os.path.exists(alt_model_path):
                                 model_path = alt_model_path
@@ -479,8 +501,7 @@ class InsightFaceRecognizer(FaceRecognizer):
                                 self._download_insightface_model(self.model_name)
 
                                 # 检查模型目录是否存在任何ONNX文件
-                                model_dir = os.path.join(os.path.expanduser('~'), '.insightface', 'models',
-                                                       self.model_name)
+                                model_dir = os.path.join(get_insightface_models_dir(), self.model_name)
 
                                 # 尝试查找可用的模型文件
                                 model_found = False

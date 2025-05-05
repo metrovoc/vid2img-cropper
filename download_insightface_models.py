@@ -11,7 +11,10 @@ import argparse
 import tempfile
 import zipfile
 import urllib.request
+import shutil
 from pathlib import Path
+
+from src.utils.paths import get_insightface_models_dir
 
 # 配置日志
 logging.basicConfig(level=logging.INFO,
@@ -29,7 +32,7 @@ def download_model(model_name="buffalo_l"):
         是否成功
     """
     # 获取模型目录
-    model_dir = os.path.join(os.path.expanduser('~'), '.insightface', 'models', model_name)
+    model_dir = os.path.join(get_insightface_models_dir(), model_name)
     os.makedirs(model_dir, exist_ok=True)
 
     # 模型文件路径 - 检查两种可能的模型文件
@@ -68,9 +71,26 @@ def download_model(model_name="buffalo_l"):
         logger.info(f"下载完成，文件保存到: {temp_path}")
 
         # 解压模型
-        logger.info(f"正在解压模型到 {os.path.dirname(model_dir)}...")
+        logger.info(f"正在解压模型到 {model_dir}...")
         with zipfile.ZipFile(temp_path, 'r') as zip_ref:
-            zip_ref.extractall(os.path.dirname(model_dir))
+            # 创建临时目录用于解压
+            temp_extract_dir = tempfile.mkdtemp()
+            try:
+                # 先解压到临时目录
+                zip_ref.extractall(temp_extract_dir)
+
+                # 查找解压后的模型文件
+                for root, dirs, files in os.walk(temp_extract_dir):
+                    for file in files:
+                        if file.endswith('.onnx'):
+                            # 找到onnx文件，复制到目标目录
+                            src_file = os.path.join(root, file)
+                            dst_file = os.path.join(model_dir, file)
+                            logger.info(f"复制模型文件: {src_file} -> {dst_file}")
+                            shutil.copy2(src_file, dst_file)
+            finally:
+                # 清理临时目录
+                shutil.rmtree(temp_extract_dir, ignore_errors=True)
 
         # 检查是否存在任一模型文件
         if os.path.exists(model_file_mbf):
@@ -121,7 +141,7 @@ def try_insightface_download(model_name="buffalo_l"):
         app.prepare(ctx_id=0)
 
         # 检查模型目录是否存在任何ONNX文件
-        model_dir = os.path.join(os.path.expanduser('~'), '.insightface', 'models', model_name)
+        model_dir = os.path.join(get_insightface_models_dir(), model_name)
         if os.path.exists(model_dir):
             onnx_files = [f for f in os.listdir(model_dir) if f.endswith('.onnx')]
             if onnx_files:

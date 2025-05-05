@@ -8,6 +8,12 @@ from pathlib import Path
 import urllib.request
 import shutil
 import importlib.util
+import logging
+
+from src.utils.paths import get_models_dir
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class FaceDetector:
@@ -58,8 +64,8 @@ class YuNetFaceDetector(FaceDetector):
             return model_path
 
         # 默认模型路径
-        default_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                                    "models", "face_detection_yunet_2023mar.onnx")
+        models_dir = get_models_dir()
+        default_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
 
         # 如果模型不存在，尝试下载
         if not os.path.exists(default_path):
@@ -147,8 +153,8 @@ class AnimeFaceDetector(FaceDetector):
             return model_path
 
         # 默认模型路径
-        default_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                                    "models", "lbpcascade_animeface.xml")
+        models_dir = get_models_dir()
+        default_path = os.path.join(models_dir, "lbpcascade_animeface.xml")
 
         # 如果模型不存在，尝试下载
         if not os.path.exists(default_path):
@@ -233,8 +239,8 @@ class YOLOv8FaceDetector(FaceDetector):
             return model_path
 
         # 默认模型路径
-        default_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                                    "models", "yolov8n-face.pt")
+        models_dir = get_models_dir()
+        default_path = os.path.join(models_dir, "yolov8n-face.pt")
 
         # 如果模型不存在，尝试下载
         if not os.path.exists(default_path):
@@ -329,8 +335,8 @@ class SCRFDFaceDetector(FaceDetector):
             return model_path
 
         # 默认模型路径
-        default_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                                    "models", "scrfd_10g_bnkps.onnx")
+        models_dir = get_models_dir()
+        default_path = os.path.join(models_dir, "scrfd_10g_bnkps.onnx")
 
         # 如果模型不存在，尝试下载
         if not os.path.exists(default_path):
