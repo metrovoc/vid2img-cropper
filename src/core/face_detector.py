@@ -44,7 +44,7 @@ class FaceDetector:
 class YuNetFaceDetector(FaceDetector):
     """使用YuNet模型的人脸检测器"""
 
-    def __init__(self, model_path=None, confidence_threshold=0.6, input_size=(320, 320)):
+    def __init__(self, model_path=None, confidence_threshold=0.6, input_size=(320, 320), use_gpu=False):
         """
         初始化YuNet人脸检测器
 
@@ -52,9 +52,11 @@ class YuNetFaceDetector(FaceDetector):
             model_path: 模型文件路径，如果为None则尝试下载
             confidence_threshold: 置信度阈值
             input_size: 模型输入大小
+            use_gpu: 是否使用GPU加速
         """
         super().__init__(confidence_threshold)
         self.input_size = input_size
+        self.use_gpu = use_gpu
         self.model_path = self._get_model_path(model_path)
         self.detector = self._load_model()
 
@@ -91,15 +93,53 @@ class YuNetFaceDetector(FaceDetector):
 
     def _load_model(self):
         """加载YuNet模型"""
-        detector = cv2.FaceDetectorYN.create(
-            model=self.model_path,
-            config="",
-            input_size=self.input_size,
-            score_threshold=self.confidence_threshold,
-            backend_id=cv2.dnn.DNN_BACKEND_DEFAULT,
-            target_id=cv2.dnn.DNN_TARGET_CPU
-        )
-        return detector
+        # 根据是否使用GPU选择后端和目标
+        backend_id = cv2.dnn.DNN_BACKEND_DEFAULT
+        target_id = cv2.dnn.DNN_TARGET_CPU
+
+        if self.use_gpu:
+            # 检查CUDA是否可用
+            if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+                try:
+                    # 尝试使用CUDA后端
+                    backend_id = cv2.dnn.DNN_BACKEND_CUDA
+                    target_id = cv2.dnn.DNN_TARGET_CUDA
+                    logger.info("YuNet检测器使用CUDA加速")
+                except Exception as e:
+                    logger.warning(f"无法使用CUDA加速YuNet检测器: {e}")
+                    logger.info("回退到CPU模式")
+            else:
+                logger.warning("未检测到CUDA设备，YuNet检测器使用CPU模式")
+
+        try:
+            detector = cv2.FaceDetectorYN.create(
+                model=self.model_path,
+                config="",
+                input_size=self.input_size,
+                score_threshold=self.confidence_threshold,
+                backend_id=backend_id,
+                target_id=target_id
+            )
+            return detector
+        except Exception as e:
+            logger.error(f"加载YuNet模型失败: {e}")
+            # 如果使用GPU失败，尝试回退到CPU
+            if self.use_gpu:
+                logger.info("尝试使用CPU模式加载YuNet模型")
+                try:
+                    detector = cv2.FaceDetectorYN.create(
+                        model=self.model_path,
+                        config="",
+                        input_size=self.input_size,
+                        score_threshold=self.confidence_threshold,
+                        backend_id=cv2.dnn.DNN_BACKEND_DEFAULT,
+                        target_id=cv2.dnn.DNN_TARGET_CPU
+                    )
+                    return detector
+                except Exception as e2:
+                    logger.error(f"使用CPU模式加载YuNet模型也失败: {e2}")
+                    return None
+            return None
 
     def detect(self, image):
         """
@@ -135,17 +175,22 @@ class YuNetFaceDetector(FaceDetector):
 class AnimeFaceDetector(FaceDetector):
     """使用级联分类器的动漫人脸检测器"""
 
-    def __init__(self, model_path=None, confidence_threshold=0.6):
+    def __init__(self, model_path=None, confidence_threshold=0.6, use_gpu=False):
         """
         初始化动漫人脸检测器
 
         Args:
             model_path: 级联分类器XML文件路径，如果为None则尝试下载
             confidence_threshold: 置信度阈值
+            use_gpu: 是否使用GPU加速（级联分类器不支持GPU加速，此参数仅为统一接口）
         """
         super().__init__(confidence_threshold)
+        self.use_gpu = use_gpu
         self.model_path = self._get_model_path(model_path)
         self.detector = self._load_model()
+
+        if self.use_gpu:
+            logger.warning("级联分类器不支持GPU加速，将使用CPU模式")
 
     def _get_model_path(self, model_path):
         """获取模型路径，如果未指定则使用默认路径"""
@@ -219,7 +264,7 @@ class AnimeFaceDetector(FaceDetector):
 class YOLOv8FaceDetector(FaceDetector):
     """使用YOLOv8模型的人脸检测器"""
 
-    def __init__(self, model_path=None, confidence_threshold=0.6, input_size=(640, 640)):
+    def __init__(self, model_path=None, confidence_threshold=0.6, input_size=(640, 640), use_gpu=False):
         """
         初始化YOLOv8人脸检测器
 
@@ -227,9 +272,11 @@ class YOLOv8FaceDetector(FaceDetector):
             model_path: 模型文件路径，如果为None则尝试下载
             confidence_threshold: 置信度阈值
             input_size: 模型输入大小
+            use_gpu: 是否使用GPU加速
         """
         super().__init__(confidence_threshold)
         self.input_size = input_size
+        self.use_gpu = use_gpu
         self.model_path = self._get_model_path(model_path)
         self.detector = self._load_model()
 
@@ -268,14 +315,37 @@ class YOLOv8FaceDetector(FaceDetector):
         try:
             # 检查是否安装了ultralytics
             if importlib.util.find_spec("ultralytics") is None:
-                print("未安装ultralytics库，请使用pip install ultralytics安装")
+                logger.error("未安装ultralytics库，请使用pip install ultralytics安装")
                 return None
 
             from ultralytics import YOLO
+
+            # 设置设备
+            device = 'cpu'
+            if self.use_gpu:
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        device = 0  # 使用第一个GPU
+                        logger.info("YOLOv8检测器使用CUDA加速")
+                    else:
+                        logger.warning("未检测到CUDA设备，YOLOv8检测器使用CPU模式")
+                except ImportError:
+                    logger.warning("未安装PyTorch或CUDA不可用，YOLOv8检测器使用CPU模式")
+
+            # 加载模型
             model = YOLO(self.model_path)
+
+            # 设置设备
+            if device != 'cpu':
+                try:
+                    model.to(device)
+                except Exception as e:
+                    logger.warning(f"将YOLOv8模型移至GPU失败: {e}，使用CPU模式")
+
             return model
         except Exception as e:
-            print(f"加载YOLOv8模型失败: {e}")
+            logger.error(f"加载YOLOv8模型失败: {e}")
             return None
 
     def detect(self, image):
@@ -315,7 +385,7 @@ class YOLOv8FaceDetector(FaceDetector):
 class SCRFDFaceDetector(FaceDetector):
     """使用SCRFD模型的人脸检测器"""
 
-    def __init__(self, model_path=None, confidence_threshold=0.6, input_size=(640, 640)):
+    def __init__(self, model_path=None, confidence_threshold=0.6, input_size=(640, 640), use_gpu=False):
         """
         初始化SCRFD人脸检测器
 
@@ -323,9 +393,11 @@ class SCRFDFaceDetector(FaceDetector):
             model_path: 模型文件路径，如果为None则尝试下载
             confidence_threshold: 置信度阈值
             input_size: 模型输入大小
+            use_gpu: 是否使用GPU加速
         """
         super().__init__(confidence_threshold)
         self.input_size = input_size
+        self.use_gpu = use_gpu
         self.model_path = self._get_model_path(model_path)
         self.detector = self._load_model()
 
@@ -364,14 +436,44 @@ class SCRFDFaceDetector(FaceDetector):
         try:
             # 检查是否安装了onnxruntime
             if importlib.util.find_spec("onnxruntime") is None:
-                print("未安装onnxruntime库，请使用pip install onnxruntime安装")
+                logger.error("未安装onnxruntime库，请使用pip install onnxruntime安装")
                 return None
 
             import onnxruntime
-            session = onnxruntime.InferenceSession(self.model_path)
-            return session
+
+            # 根据是否使用GPU选择提供程序
+            providers = ['CPUExecutionProvider']
+
+            if self.use_gpu:
+                # 检查是否有可用的GPU
+                try:
+                    if 'CUDAExecutionProvider' in onnxruntime.get_available_providers():
+                        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                        logger.info("SCRFD检测器使用CUDA加速")
+                    else:
+                        logger.warning("未检测到CUDA提供程序，SCRFD检测器使用CPU模式")
+                except Exception as e:
+                    logger.warning(f"检查CUDA提供程序时出错: {e}，SCRFD检测器使用CPU模式")
+
+            # 创建会话
+            try:
+                session = onnxruntime.InferenceSession(self.model_path, providers=providers)
+                return session
+            except Exception as e:
+                logger.error(f"使用提供程序 {providers} 加载SCRFD模型失败: {e}")
+
+                # 如果使用GPU失败，尝试回退到CPU
+                if self.use_gpu and 'CUDAExecutionProvider' in providers:
+                    logger.info("尝试使用CPU模式加载SCRFD模型")
+                    try:
+                        session = onnxruntime.InferenceSession(self.model_path, providers=['CPUExecutionProvider'])
+                        return session
+                    except Exception as e2:
+                        logger.error(f"使用CPU模式加载SCRFD模型也失败: {e2}")
+
+                return None
         except Exception as e:
-            print(f"加载SCRFD模型失败: {e}")
+            logger.error(f"加载SCRFD模型失败: {e}")
             return None
 
     def detect(self, image):
@@ -435,17 +537,21 @@ class SCRFDFaceDetector(FaceDetector):
         return face_results
 
 
-def create_detector(detector_type="yunet", **kwargs):
+def create_detector(detector_type="yunet", use_gpu=False, **kwargs):
     """
     创建人脸检测器
 
     Args:
         detector_type: 检测器类型，"yunet"、"anime"、"yolov8"或"scrfd"
+        use_gpu: 是否使用GPU加速
         **kwargs: 传递给检测器的参数
 
     Returns:
         人脸检测器实例
     """
+    # 确保use_gpu参数传递给检测器
+    kwargs['use_gpu'] = use_gpu
+
     if detector_type.lower() == "yunet":
         return YuNetFaceDetector(**kwargs)
     elif detector_type.lower() == "anime":

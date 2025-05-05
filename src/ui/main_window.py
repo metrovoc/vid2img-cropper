@@ -4,6 +4,7 @@
 import os
 import sys
 import time
+import cv2
 from datetime import timedelta
 from pathlib import Path
 
@@ -538,6 +539,31 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(ui_group)
 
+        # 硬件加速设置
+        hardware_group = QGroupBox("硬件加速")
+        hardware_layout = QFormLayout(hardware_group)
+
+        # 使用GPU加速
+        self.use_gpu_check = QCheckBox()
+        self.use_gpu_check.setChecked(self.config.get("processing", "use_gpu", False))
+        self.use_gpu_check.setToolTip("启用GPU加速可以提高处理速度，但需要CUDA支持")
+        hardware_layout.addRow("使用GPU加速:", self.use_gpu_check)
+
+        # GPU内存限制
+        self.gpu_memory_limit_spin = QSpinBox()
+        self.gpu_memory_limit_spin.setRange(0, 16000)
+        self.gpu_memory_limit_spin.setSingleStep(512)
+        self.gpu_memory_limit_spin.setValue(self.config.get("processing", "gpu_memory_limit", 0))
+        self.gpu_memory_limit_spin.setToolTip("GPU内存限制（MB），0表示不限制。如果遇到内存不足错误，可以设置此值")
+        hardware_layout.addRow("GPU内存限制(MB):", self.gpu_memory_limit_spin)
+
+        # 检测GPU可用性
+        self.check_gpu_button = QPushButton("检测GPU可用性")
+        self.check_gpu_button.clicked.connect(self.check_gpu_availability)
+        hardware_layout.addRow("", self.check_gpu_button)
+
+        layout.addWidget(hardware_group)
+
         # 关于信息
         about_group = QGroupBox("关于")
         about_layout = QVBoxLayout(about_group)
@@ -922,6 +948,94 @@ class MainWindow(QMainWindow):
         # 切换到结果选项卡
         self.tab_widget.setCurrentIndex(1)
 
+    def check_gpu_availability(self):
+        """检测GPU可用性"""
+        try:
+            # 检查CUDA是否可用
+            cuda_available = False
+            cuda_devices = 0
+            cuda_version = "未知"
+
+            # 检查OpenCV CUDA支持
+            opencv_cuda = False
+            try:
+                opencv_cuda = cv2.cuda.getCudaEnabledDeviceCount() > 0
+                if opencv_cuda:
+                    cuda_available = True
+                    cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
+            except Exception:
+                pass
+
+            # 检查ONNX Runtime CUDA支持
+            onnx_cuda = False
+            try:
+                import onnxruntime
+                providers = onnxruntime.get_available_providers()
+                onnx_cuda = 'CUDAExecutionProvider' in providers
+                if onnx_cuda:
+                    cuda_available = True
+            except ImportError:
+                pass
+
+            # 尝试获取CUDA版本
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    cuda_available = True
+                    cuda_devices = torch.cuda.device_count()
+                    cuda_version = torch.version.cuda
+            except ImportError:
+                pass
+
+            # 显示结果
+            if cuda_available:
+                message = f"GPU加速可用!\n\n"
+                message += f"CUDA设备数量: {cuda_devices}\n"
+                if cuda_version != "未知":
+                    message += f"CUDA版本: {cuda_version}\n"
+                message += f"OpenCV CUDA支持: {'是' if opencv_cuda else '否'}\n"
+                message += f"ONNX Runtime CUDA支持: {'是' if onnx_cuda else '否'}\n\n"
+                message += "您可以启用GPU加速以提高处理速度。"
+
+                QMessageBox.information(self, "GPU检测结果", message)
+
+                # 如果GPU可用但未启用，询问是否启用
+                if not self.use_gpu_check.isChecked():
+                    reply = QMessageBox.question(
+                        self,
+                        "启用GPU加速",
+                        "检测到可用的GPU，是否启用GPU加速？",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.Yes
+                    )
+
+                    if reply == QMessageBox.Yes:
+                        self.use_gpu_check.setChecked(True)
+            else:
+                QMessageBox.warning(
+                    self,
+                    "GPU检测结果",
+                    "未检测到可用的GPU或CUDA支持。\n\n"
+                    "请确保您的系统安装了NVIDIA GPU驱动程序和CUDA。\n"
+                    "应用将使用CPU模式运行，这可能会较慢。"
+                )
+
+                # 如果GPU不可用但启用了GPU选项，询问是否禁用
+                if self.use_gpu_check.isChecked():
+                    reply = QMessageBox.question(
+                        self,
+                        "禁用GPU加速",
+                        "未检测到可用的GPU，是否禁用GPU加速选项？",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.Yes
+                    )
+
+                    if reply == QMessageBox.Yes:
+                        self.use_gpu_check.setChecked(False)
+
+        except Exception as e:
+            QMessageBox.warning(self, "GPU检测错误", f"检测GPU时发生错误:\n{str(e)}")
+
     def save_settings(self):
         """保存设置"""
         # 处理选项
@@ -943,6 +1057,10 @@ class MainWindow(QMainWindow):
         self.config.set("processing", "face_recognition_model_name", self.face_model_name_combo.currentData())
         self.config.set("processing", "face_clustering_method", self.face_clustering_method_combo.currentData())
         self.config.set("processing", "face_similarity_threshold", self.face_similarity_spin.value())
+
+        # GPU加速选项
+        self.config.set("processing", "use_gpu", self.use_gpu_check.isChecked())
+        self.config.set("processing", "gpu_memory_limit", self.gpu_memory_limit_spin.value())
 
         # 输出选项
         self.config.set("output", "format", self.format_combo.currentData())

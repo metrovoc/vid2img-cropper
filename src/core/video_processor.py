@@ -69,9 +69,12 @@ class VideoProcessor:
         """初始化人脸检测器"""
         if self.detector is None:
             detector_type = self.config.get("processing", "detector_type", "yunet")
+            use_gpu = self.config.get("processing", "use_gpu", False)
+
             self.detector = create_detector(
                 detector_type=detector_type,
-                confidence_threshold=self.confidence_threshold
+                confidence_threshold=self.confidence_threshold,
+                use_gpu=use_gpu
             )
 
     def _init_face_recognizer(self):
@@ -80,6 +83,8 @@ class VideoProcessor:
             # 获取配置的人脸识别模型类型
             recognizer_type = self.config.get("processing", "face_recognition_model", "insightface")
             model_name = self.config.get("processing", "face_recognition_model_name", "buffalo_l")
+            use_gpu = self.config.get("processing", "use_gpu", False)
+            gpu_memory_limit = self.config.get("processing", "gpu_memory_limit", 0)
 
             # 准备参数
             params = {
@@ -100,9 +105,15 @@ class VideoProcessor:
                 # 创建人脸识别器
                 self.face_recognizer = create_face_recognizer(
                     recognizer_type=recognizer_type,
+                    use_gpu=use_gpu,
+                    gpu_memory_limit=gpu_memory_limit,
                     **params
                 )
-                logger.info(f"使用 {recognizer_type} 人脸识别器初始化成功")
+
+                if use_gpu:
+                    logger.info(f"使用 {recognizer_type} 人脸识别器初始化成功 (GPU模式)")
+                else:
+                    logger.info(f"使用 {recognizer_type} 人脸识别器初始化成功 (CPU模式)")
 
                 # 检查是否需要清理数据库中的特征向量
                 # 如果从OpenCV切换到InsightFace或反之，特征向量维度会不同

@@ -142,7 +142,7 @@ class FaceRecognizer:
 class OpenCVFaceRecognizer(FaceRecognizer):
     """使用OpenCV的人脸识别器"""
 
-    def __init__(self, model_path=None, model_name=None, confidence_threshold=0.6, **kwargs):
+    def __init__(self, model_path=None, model_name=None, confidence_threshold=0.6, use_gpu=False, **kwargs):
         """
         初始化OpenCV人脸识别器
 
@@ -150,9 +150,11 @@ class OpenCVFaceRecognizer(FaceRecognizer):
             model_path: 模型文件路径，如果为None则使用默认路径
             model_name: 模型名称（OpenCV识别器不使用此参数，但保留以统一接口）
             confidence_threshold: 置信度阈值
+            use_gpu: 是否使用GPU加速
             **kwargs: 其他参数
         """
         super().__init__(model_path, model_name, confidence_threshold, **kwargs)
+        self.use_gpu = use_gpu
 
         # 默认模型文件名和URL
         default_filename = "face_recognition_sface_2021dec.onnx"
@@ -167,16 +169,50 @@ class OpenCVFaceRecognizer(FaceRecognizer):
     def _load_model(self):
         """加载OpenCV人脸识别模型"""
         try:
+            # 根据是否使用GPU选择后端和目标
+            backend_id = cv2.dnn.DNN_BACKEND_DEFAULT
+            target_id = cv2.dnn.DNN_TARGET_CPU
+
+            if self.use_gpu:
+                # 检查CUDA是否可用
+                if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+                    try:
+                        # 尝试使用CUDA后端
+                        backend_id = cv2.dnn.DNN_BACKEND_CUDA
+                        target_id = cv2.dnn.DNN_TARGET_CUDA
+                        logger.info("OpenCV人脸识别器使用CUDA加速")
+                    except Exception as e:
+                        logger.warning(f"无法使用CUDA加速OpenCV人脸识别器: {e}")
+                        logger.info("回退到CPU模式")
+                else:
+                    logger.warning("未检测到CUDA设备，OpenCV人脸识别器使用CPU模式")
+
             recognizer = cv2.FaceRecognizerSF.create(
                 model=self.model_path,
                 config="",
-                backend_id=cv2.dnn.DNN_BACKEND_DEFAULT,
-                target_id=cv2.dnn.DNN_TARGET_CPU
+                backend_id=backend_id,
+                target_id=target_id
             )
             logger.info("OpenCV人脸识别模型加载成功")
             return recognizer
         except Exception as e:
             logger.error(f"加载OpenCV人脸识别模型失败: {e}")
+
+            # 如果使用GPU失败，尝试回退到CPU
+            if self.use_gpu:
+                logger.info("尝试使用CPU模式加载OpenCV人脸识别模型")
+                try:
+                    recognizer = cv2.FaceRecognizerSF.create(
+                        model=self.model_path,
+                        config="",
+                        backend_id=cv2.dnn.DNN_BACKEND_DEFAULT,
+                        target_id=cv2.dnn.DNN_TARGET_CPU
+                    )
+                    logger.info("使用CPU模式加载OpenCV人脸识别模型成功")
+                    return recognizer
+                except Exception as e2:
+                    logger.error(f"使用CPU模式加载OpenCV人脸识别模型也失败: {e2}")
+
             return None
 
     def extract_feature(self, face_img):
@@ -211,7 +247,7 @@ class OpenCVFaceRecognizer(FaceRecognizer):
 class InsightFaceRecognizer(FaceRecognizer):
     """使用InsightFace的人脸识别器"""
 
-    def __init__(self, model_path=None, model_name="buffalo_l", confidence_threshold=0.6, det_size=(640, 640), **kwargs):
+    def __init__(self, model_path=None, model_name="buffalo_l", confidence_threshold=0.6, det_size=(640, 640), use_gpu=False, gpu_memory_limit=0, **kwargs):
         """
         初始化InsightFace人脸识别器
 
@@ -220,6 +256,8 @@ class InsightFaceRecognizer(FaceRecognizer):
             model_name: 模型名称，可选"buffalo_l", "buffalo_m", "buffalo_s"
             confidence_threshold: 置信度阈值
             det_size: 检测尺寸
+            use_gpu: 是否使用GPU加速
+            gpu_memory_limit: GPU内存限制（MB），0表示不限制
             **kwargs: 其他参数
         """
         # 在导入InsightFace之前设置环境变量，确保模型下载到正确的位置
@@ -227,6 +265,8 @@ class InsightFaceRecognizer(FaceRecognizer):
 
         super().__init__(model_path, model_name, confidence_threshold, **kwargs)
         self.det_size = det_size
+        self.use_gpu = use_gpu
+        self.gpu_memory_limit = gpu_memory_limit
         self.model = self._load_model()
 
     def compute_similarity(self, feature1, feature2, method="cosine"):
@@ -294,18 +334,71 @@ class InsightFaceRecognizer(FaceRecognizer):
 
             # 初始化FaceAnalysis
             try:
-                # 尝试使用CPU执行提供程序
-                analyzer = FaceAnalysis(name=self.model_name, providers=['CPUExecutionProvider'])
-                analyzer.prepare(ctx_id=0, det_size=self.det_size)
-                logger.info(f"InsightFace {self.model_name} 模型加载成功")
+                # 根据是否使用GPU选择提供程序
+                providers = ['CPUExecutionProvider']
+                ctx_id = -1  # CPU模式
+
+                if self.use_gpu:
+                    # 检查是否有可用的GPU
+                    try:
+                        import onnxruntime
+                        gpu_available = 'CUDAExecutionProvider' in onnxruntime.get_available_providers()
+
+                        if gpu_available:
+                            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                            ctx_id = 0  # GPU模式
+
+                            # 如果设置了GPU内存限制
+                            if self.gpu_memory_limit > 0:
+                                # 设置ONNX运行时的GPU内存限制
+                                options = onnxruntime.SessionOptions()
+                                options.intra_op_num_threads = 1
+                                options.inter_op_num_threads = 1
+                                options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+                                options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+                                # 设置GPU内存限制（以MB为单位）
+                                options.set_session_graph_optimization_level(onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL)
+                                options.enable_cpu_mem_arena = False
+                                options.enable_mem_pattern = False
+                                options.enable_mem_reuse = False
+
+                                # 设置CUDA提供程序选项
+                                provider_options = [
+                                    {
+                                        'device_id': 0,
+                                        'arena_extend_strategy': 'kNextPowerOfTwo',
+                                        'gpu_mem_limit': self.gpu_memory_limit * 1024 * 1024,  # 转换为字节
+                                        'cudnn_conv_algo_search': 'EXHAUSTIVE',
+                                        'do_copy_in_default_stream': True,
+                                    }
+                                ]
+
+                                logger.info(f"InsightFace使用CUDA加速，GPU内存限制: {self.gpu_memory_limit}MB")
+                            else:
+                                logger.info("InsightFace使用CUDA加速，无内存限制")
+                        else:
+                            logger.warning("未检测到CUDA提供程序，InsightFace使用CPU模式")
+                    except ImportError:
+                        logger.warning("未安装onnxruntime，无法检查GPU可用性，InsightFace使用CPU模式")
+
+                # 创建FaceAnalysis实例
+                analyzer = FaceAnalysis(name=self.model_name, providers=providers)
+                analyzer.prepare(ctx_id=ctx_id, det_size=self.det_size)
+
+                if ctx_id >= 0:
+                    logger.info(f"InsightFace {self.model_name} 模型加载成功 (GPU模式)")
+                else:
+                    logger.info(f"InsightFace {self.model_name} 模型加载成功 (CPU模式)")
+
                 return analyzer
             except Exception as e:
-                logger.warning(f"使用CPUExecutionProvider加载模型失败: {e}")
+                logger.warning(f"使用指定提供程序加载模型失败: {e}")
 
                 # 尝试不指定提供程序
                 try:
                     analyzer = FaceAnalysis(name=self.model_name)
-                    analyzer.prepare(ctx_id=0, det_size=self.det_size)
+                    analyzer.prepare(ctx_id=0 if self.use_gpu else -1, det_size=self.det_size)
                     logger.info(f"InsightFace {self.model_name} 模型加载成功(默认提供程序)")
                     return analyzer
                 except Exception as e2:
@@ -634,12 +727,14 @@ class InsightFaceRecognizer(FaceRecognizer):
             return None
 
 
-def create_face_recognizer(recognizer_type="insightface", **kwargs):
+def create_face_recognizer(recognizer_type="insightface", use_gpu=False, gpu_memory_limit=0, **kwargs):
     """
     创建人脸识别器
 
     Args:
         recognizer_type: 识别器类型，"insightface"或"opencv"
+        use_gpu: 是否使用GPU加速
+        gpu_memory_limit: GPU内存限制（MB），0表示不限制
         **kwargs: 传递给识别器的参数，可包含：
             - model_path: 模型文件路径
             - model_name: 模型名称（主要用于InsightFace）
@@ -651,6 +746,10 @@ def create_face_recognizer(recognizer_type="insightface", **kwargs):
     """
     # 统一参数处理，确保所有必要参数都存在
     recognizer_type = recognizer_type.lower()
+
+    # 确保GPU相关参数传递给识别器
+    kwargs['use_gpu'] = use_gpu
+    kwargs['gpu_memory_limit'] = gpu_memory_limit
 
     try:
         if recognizer_type == "insightface":

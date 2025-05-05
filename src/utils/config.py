@@ -30,6 +30,8 @@ class Config:
             "skip_similar_faces": True,  # 是否跳过相似人脸
             "face_iou_threshold": 0.7,  # 人脸IoU阈值
             "face_appearance_threshold": 0.8,  # 人脸外观相似度阈值
+            "use_gpu": False,  # 是否使用GPU加速
+            "gpu_memory_limit": 0,  # GPU内存限制（MB），0表示不限制
         },
         # 输出配置
         "output": {
