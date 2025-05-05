@@ -12,9 +12,9 @@ from PySide6.QtWidgets import (
     QProgressBar, QFileDialog, QComboBox, QSpinBox, QDoubleSpinBox,
     QCheckBox, QTabWidget, QSplitter, QMessageBox, QGroupBox, QFormLayout,
     QLineEdit, QSlider, QStatusBar, QApplication, QListWidget, QListWidgetItem,
-    QScrollArea, QSizePolicy
+    QScrollArea, QSizePolicy, QProgressDialog
 )
-from PySide6.QtCore import Qt, QThread, Signal, QSize, QUrl, QDir
+from PySide6.QtCore import Qt, QThread, Signal, QSize, QUrl, QDir, QCoreApplication
 from PySide6.QtGui import QIcon, QPixmap, QDesktopServices
 
 from src.utils.config import Config
@@ -148,9 +148,13 @@ class MainWindow(QMainWindow):
         self.file_path_edit.setPlaceholderText("选择视频文件...")
         file_select_layout.addWidget(self.file_path_edit)
 
-        self.browse_button = QPushButton("浏览...")
+        self.browse_button = QPushButton("浏览文件...")
         self.browse_button.clicked.connect(self.on_browse_clicked)
         file_select_layout.addWidget(self.browse_button)
+
+        self.browse_folder_button = QPushButton("导入文件夹...")
+        self.browse_folder_button.clicked.connect(self.on_browse_folder_clicked)
+        file_select_layout.addWidget(self.browse_folder_button)
 
         file_layout.addLayout(file_select_layout)
 
@@ -607,7 +611,7 @@ class MainWindow(QMainWindow):
             self.file_info_label.setText("队列已清空")
 
     def on_browse_clicked(self):
-        """浏览按钮点击处理"""
+        """浏览文件按钮点击处理"""
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.ExistingFiles)
         file_dialog.setNameFilter("视频文件 (*.mp4 *.avi *.mkv *.mov *.wmv *.flv *.webm)")
@@ -617,6 +621,142 @@ class MainWindow(QMainWindow):
             if file_paths:
                 self.file_path_edit.setText("; ".join(file_paths))
                 self.file_info_label.setText(f"已选择 {len(file_paths)} 个文件")
+
+    def on_browse_folder_clicked(self):
+        """导入文件夹按钮点击处理"""
+        dir_dialog = QFileDialog()
+        dir_dialog.setFileMode(QFileDialog.Directory)
+        dir_dialog.setOption(QFileDialog.ShowDirsOnly, True)
+
+        if dir_dialog.exec():
+            folder_path = dir_dialog.selectedFiles()[0]
+            if folder_path:
+                # 询问是否包含子文件夹
+                include_subfolders = QMessageBox.question(
+                    self,
+                    "包含子文件夹",
+                    "是否包含子文件夹中的视频文件？",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                ) == QMessageBox.Yes
+
+                # 支持的视频文件扩展名
+                video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm']
+
+                # 创建进度对话框
+                progress_dialog = QProgressDialog("正在扫描文件夹...", "取消", 0, 100, self)
+                progress_dialog.setWindowTitle("导入文件夹")
+                progress_dialog.setWindowModality(Qt.WindowModal)
+                progress_dialog.setMinimumDuration(500)  # 500ms后显示
+                progress_dialog.setValue(0)
+
+                # 第一步：扫描文件夹中的所有文件
+                all_files = []
+
+                if include_subfolders:
+                    # 包含子文件夹，使用os.walk递归扫描
+                    for root, _, files in os.walk(folder_path):
+                        for file in files:
+                            all_files.append(os.path.join(root, file))
+
+                            # 更新进度对话框
+                            progress_dialog.setValue(10)  # 扫描完成占10%进度
+                            QCoreApplication.processEvents()
+
+                            if progress_dialog.wasCanceled():
+                                return
+                else:
+                    # 不包含子文件夹，只扫描当前文件夹
+                    for file in os.listdir(folder_path):
+                        file_path = os.path.join(folder_path, file)
+                        if os.path.isfile(file_path):
+                            all_files.append(file_path)
+
+                            # 更新进度对话框
+                            progress_dialog.setValue(10)  # 扫描完成占10%进度
+                            QCoreApplication.processEvents()
+
+                            if progress_dialog.wasCanceled():
+                                return
+
+                # 第二步：筛选视频文件
+                video_files = []
+                total_files = len(all_files)
+
+                if total_files == 0:
+                    progress_dialog.close()
+                    QMessageBox.information(self, "提示", f"文件夹 {folder_path} 中没有文件")
+                    return
+
+                for i, file_path in enumerate(all_files):
+                    file_ext = os.path.splitext(file_path)[1].lower()
+                    if file_ext in video_extensions:
+                        video_files.append(file_path)
+
+                    # 更新进度对话框
+                    progress = 10 + int((i / total_files) * 40)  # 筛选占40%进度
+                    progress_dialog.setValue(progress)
+                    progress_dialog.setLabelText(f"正在筛选视频文件... ({i+1}/{total_files})")
+                    QCoreApplication.processEvents()
+
+                    if progress_dialog.wasCanceled():
+                        return
+
+                if not video_files:
+                    progress_dialog.close()
+                    QMessageBox.information(self, "提示", f"在文件夹 {folder_path} 中未找到支持的视频文件")
+                    self.file_info_label.setText("未找到视频文件")
+                    return
+
+                # 第三步：添加到队列
+                added_count = 0
+                total_videos = len(video_files)
+
+                for i, path in enumerate(video_files):
+                    # 检查是否已在队列中
+                    exists = False
+                    for j in range(self.queue_list.count()):
+                        if self.queue_list.item(j).data(Qt.UserRole) == path:
+                            exists = True
+                            break
+
+                    if not exists:
+                        item = QListWidgetItem(os.path.basename(path))
+                        item.setData(Qt.UserRole, path)
+                        self.queue_list.addItem(item)
+                        added_count += 1
+
+                    # 更新进度对话框
+                    progress = 50 + int((i / total_videos) * 50)  # 添加占50%进度
+                    progress_dialog.setValue(progress)
+                    progress_dialog.setLabelText(f"正在添加视频到队列... ({i+1}/{total_videos})")
+                    QCoreApplication.processEvents()
+
+                    if progress_dialog.wasCanceled():
+                        break
+
+                # 完成
+                progress_dialog.setValue(100)
+                progress_dialog.close()
+
+                # 更新状态
+                if added_count > 0:
+                    self.file_info_label.setText(f"从文件夹导入了 {added_count} 个视频文件，队列中共有 {self.queue_list.count()} 个文件")
+
+                    # 询问是否立即开始处理
+                    if self.queue_list.count() > 0 and not (self.processing_thread and self.processing_thread.isRunning()):
+                        reply = QMessageBox.question(
+                            self,
+                            "开始处理",
+                            f"已成功添加 {added_count} 个视频文件到队列，是否立即开始处理？",
+                            QMessageBox.Yes | QMessageBox.No,
+                            QMessageBox.No
+                        )
+
+                        if reply == QMessageBox.Yes:
+                            self.on_start_clicked()
+                else:
+                    self.file_info_label.setText("未添加新的视频文件（可能已存在于队列中）")
 
     def on_output_dir_clicked(self):
         """输出目录按钮点击处理"""
