@@ -81,18 +81,38 @@ class CropThumbnail(QWidget):
     def init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        # 缩略图容器
+        image_container = QWidget()
+        image_container.setFixedSize(self.thumbnail_size + 8, self.thumbnail_size + 8)
+        image_container.setStyleSheet("""
+            QWidget {
+                background-color: transparent;
+                border-radius: 4px;
+            }
+        """)
+
+        image_layout = QVBoxLayout(image_container)
+        image_layout.setContentsMargins(4, 4, 4, 4)
+        image_layout.setAlignment(Qt.AlignCenter)
 
         # 缩略图标签
         self.image_label = QLabel()
         self.image_label.setFixedSize(self.thumbnail_size, self.thumbnail_size)
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ddd;")
+        self.image_label.setStyleSheet("""
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        """)
 
         # 加载缩略图
         self.load_thumbnail()
 
-        layout.addWidget(self.image_label)
+        image_layout.addWidget(self.image_label)
+        layout.addWidget(image_container)
 
         # 时间戳标签
         timestamp_ms = self.crop_item["timestamp_ms"]
@@ -100,14 +120,24 @@ class CropThumbnail(QWidget):
 
         self.timestamp_label = QLabel(timestamp_str)
         self.timestamp_label.setAlignment(Qt.AlignCenter)
-        self.timestamp_label.setStyleSheet("font-size: 10px;")
+        self.timestamp_label.setStyleSheet("""
+            font-size: 11px;
+            color: #555;
+            font-weight: 500;
+            padding: 2px;
+        """)
 
         layout.addWidget(self.timestamp_label)
 
-        # 设置鼠标悬停效果
+        # 设置整体样式
         self.setStyleSheet("""
+            CropThumbnail {
+                background-color: transparent;
+                border-radius: 6px;
+            }
+
             CropThumbnail:hover {
-                background-color: #e0e0e0;
+                background-color: rgba(0, 0, 0, 0.05);
             }
         """)
 
@@ -187,82 +217,151 @@ class ResultViewer(QWidget):
     def init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
 
         # 顶部控制区域
-        control_layout = QHBoxLayout()
+        control_group = QGroupBox("控制面板")
+        control_layout = QHBoxLayout(control_group)
+        control_layout.setContentsMargins(12, 16, 12, 12)
+        control_layout.setSpacing(12)
+
+        # 左侧控制区域
+        left_control = QWidget()
+        left_layout = QHBoxLayout(left_control)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(8)
 
         # 视频选择
+        video_select_widget = QWidget()
+        video_select_layout = QHBoxLayout(video_select_widget)
+        video_select_layout.setContentsMargins(0, 0, 0, 0)
+        video_select_layout.setSpacing(8)
+
+        video_label = QLabel("选择视频:")
+        video_label.setStyleSheet("font-weight: 500;")
+        video_select_layout.addWidget(video_label)
+
         self.video_combo = QComboBox()
-        self.video_combo.setMinimumWidth(300)
+        self.video_combo.setMinimumWidth(250)
         self.video_combo.currentIndexChanged.connect(self.on_video_changed)
-        control_layout.addWidget(QLabel("选择视频:"))
-        control_layout.addWidget(self.video_combo)
+        video_select_layout.addWidget(self.video_combo)
+
+        left_layout.addWidget(video_select_widget)
+
+        # 人脸分组选择
+        group_select_widget = QWidget()
+        group_select_layout = QHBoxLayout(group_select_widget)
+        group_select_layout.setContentsMargins(0, 0, 0, 0)
+        group_select_layout.setSpacing(8)
+
+        group_label = QLabel("人物分组:")
+        group_label.setStyleSheet("font-weight: 500;")
+        group_select_layout.addWidget(group_label)
+
+        self.group_combo = QComboBox()
+        self.group_combo.setMinimumWidth(180)
+        self.group_combo.currentIndexChanged.connect(self.on_group_changed)
+        group_select_layout.addWidget(self.group_combo)
+
+        left_layout.addWidget(group_select_widget)
+
+        control_layout.addWidget(left_control)
+
+        # 右侧按钮区域
+        right_control = QWidget()
+        right_layout = QHBoxLayout(right_control)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(8)
 
         # 批量删除按钮
         self.delete_video_button = QPushButton("删除当前视频所有裁剪")
+        self.delete_video_button.setProperty("class", "danger")
         self.delete_video_button.clicked.connect(self.delete_video_crops)
-        control_layout.addWidget(self.delete_video_button)
-
-        # 人脸分组选择
-        self.group_combo = QComboBox()
-        self.group_combo.setMinimumWidth(200)
-        self.group_combo.currentIndexChanged.connect(self.on_group_changed)
-        control_layout.addWidget(QLabel("人物分组:"))
-        control_layout.addWidget(self.group_combo)
+        right_layout.addWidget(self.delete_video_button)
 
         # 刷新按钮
         self.refresh_button = QPushButton("刷新")
         self.refresh_button.clicked.connect(self.refresh_results)
-        control_layout.addWidget(self.refresh_button)
+        right_layout.addWidget(self.refresh_button)
 
         # 打开输出目录按钮
         self.open_output_dir_button = QPushButton("打开输出目录")
         self.open_output_dir_button.clicked.connect(self.open_output_dir)
-        control_layout.addWidget(self.open_output_dir_button)
+        right_layout.addWidget(self.open_output_dir_button)
 
         # 管理分组按钮
         self.manage_groups_button = QPushButton("管理分组")
         self.manage_groups_button.clicked.connect(self.manage_face_groups)
-        control_layout.addWidget(self.manage_groups_button)
+        right_layout.addWidget(self.manage_groups_button)
 
-        control_layout.addStretch()
+        control_layout.addWidget(right_control)
+        control_layout.setStretch(0, 3)  # 左侧占比更大
+        control_layout.setStretch(1, 2)  # 右侧占比较小
 
-        layout.addLayout(control_layout)
+        layout.addWidget(control_group)
+
+        # 主内容区域
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(12)
 
         # 分割器
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(2)
+        splitter.setChildrenCollapsible(False)
 
         # 缩略图区域
+        thumbnails_group = QGroupBox("缩略图")
+        thumbnails_layout_main = QVBoxLayout(thumbnails_group)
+        thumbnails_layout_main.setContentsMargins(12, 16, 12, 12)
+
         self.thumbnails_widget = QWidget()
         self.thumbnails_layout = QGridLayout(self.thumbnails_widget)
-        self.thumbnails_layout.setContentsMargins(10, 10, 10, 10)
-        self.thumbnails_layout.setSpacing(10)
+        self.thumbnails_layout.setContentsMargins(4, 4, 4, 4)
+        self.thumbnails_layout.setSpacing(12)
 
         # 滚动区域
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(self.thumbnails_widget)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
 
-        splitter.addWidget(scroll_area)
+        thumbnails_layout_main.addWidget(scroll_area)
+        splitter.addWidget(thumbnails_group)
 
         # 详情区域
         details_widget = QWidget()
+        details_widget.setObjectName("details_widget")
         details_layout = QVBoxLayout(details_widget)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(12)
 
         # 详情组
         details_group = QGroupBox("详细信息")
+        details_group.setMinimumWidth(300)
         details_form = QFormLayout(details_group)
+        details_form.setContentsMargins(12, 16, 12, 12)
+        details_form.setSpacing(8)
+        details_form.setLabelAlignment(Qt.AlignRight)
 
         self.detail_video_path = QLabel("")
+        self.detail_video_path.setWordWrap(True)
+        self.detail_video_path.setTextInteractionFlags(Qt.TextSelectableByMouse)
         details_form.addRow("视频路径:", self.detail_video_path)
 
         self.detail_timestamp = QLabel("")
+        self.detail_timestamp.setTextInteractionFlags(Qt.TextSelectableByMouse)
         details_form.addRow("时间戳:", self.detail_timestamp)
 
         self.detail_image_path = QLabel("")
+        self.detail_image_path.setWordWrap(True)
+        self.detail_image_path.setTextInteractionFlags(Qt.TextSelectableByMouse)
         details_form.addRow("图像路径:", self.detail_image_path)
 
         self.detail_confidence = QLabel("")
+        self.detail_confidence.setTextInteractionFlags(Qt.TextSelectableByMouse)
         details_form.addRow("置信度:", self.detail_confidence)
 
         details_layout.addWidget(details_group)
@@ -274,17 +373,19 @@ class ResultViewer(QWidget):
         preview_widget = QWidget()
         preview_layout = QVBoxLayout(preview_widget)
         preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(0)
 
         self.preview_label = QLabel()
+        self.preview_label.setObjectName("preview_label")
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setMinimumSize(300, 300)
-        self.preview_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ddd;")
         preview_layout.addWidget(self.preview_label)
 
         # 视频播放器组
         video_widget = QWidget()
         video_layout = QVBoxLayout(video_widget)
         video_layout.setContentsMargins(0, 0, 0, 0)
+        video_layout.setSpacing(0)
 
         # 创建视频播放器
         self.video_player = VideoPlayer()
@@ -307,6 +408,7 @@ class ResultViewer(QWidget):
         # 添加到布局
         preview_group = QGroupBox("预览/视频")
         preview_group_layout = QVBoxLayout(preview_group)
+        preview_group_layout.setContentsMargins(12, 16, 12, 12)
         preview_group_layout.addWidget(self.stacked_widget)
 
         details_layout.addWidget(preview_group)
@@ -314,23 +416,32 @@ class ResultViewer(QWidget):
         # 操作组
         actions_group = QGroupBox("操作")
         actions_layout = QVBoxLayout(actions_group)
+        actions_layout.setContentsMargins(12, 16, 12, 12)
+        actions_layout.setSpacing(8)
+
+        # 创建按钮网格布局
+        button_grid = QGridLayout()
+        button_grid.setSpacing(8)
 
         self.open_video_button = QPushButton("在外部播放器中打开视频")
         self.open_video_button.clicked.connect(self.open_video)
-        actions_layout.addWidget(self.open_video_button)
+        button_grid.addWidget(self.open_video_button, 0, 0)
 
         self.jump_to_time_button = QPushButton("播放视频并跳转到时间点")
+        self.jump_to_time_button.setProperty("class", "success")
         self.jump_to_time_button.clicked.connect(self.jump_to_time)
-        actions_layout.addWidget(self.jump_to_time_button)
+        button_grid.addWidget(self.jump_to_time_button, 0, 1)
 
         self.open_image_button = QPushButton("打开图像")
         self.open_image_button.clicked.connect(self.open_image)
-        actions_layout.addWidget(self.open_image_button)
+        button_grid.addWidget(self.open_image_button, 1, 0)
 
         self.delete_crop_button = QPushButton("删除裁剪")
+        self.delete_crop_button.setProperty("class", "danger")
         self.delete_crop_button.clicked.connect(self.delete_crop)
-        actions_layout.addWidget(self.delete_crop_button)
+        button_grid.addWidget(self.delete_crop_button, 1, 1)
 
+        actions_layout.addLayout(button_grid)
         details_layout.addWidget(actions_group)
 
         # 添加弹性空间
@@ -341,11 +452,19 @@ class ResultViewer(QWidget):
         # 设置分割器比例
         splitter.setSizes([700, 300])
 
-        layout.addWidget(splitter)
+        content_layout.addWidget(splitter)
+        layout.addWidget(content_widget)
 
-        # 状态标签
+        # 状态区域
+        status_group = QGroupBox("状态")
+        status_layout = QVBoxLayout(status_group)
+        status_layout.setContentsMargins(12, 16, 12, 12)
+
         self.status_label = QLabel("")
-        layout.addWidget(self.status_label)
+        self.status_label.setStyleSheet("font-weight: 500;")
+        status_layout.addWidget(self.status_label)
+
+        layout.addWidget(status_group)
 
         # 初始化右键菜单
         self.init_context_menu()

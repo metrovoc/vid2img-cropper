@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSlider, QStyle, QSizePolicy
 )
-from PySide6.QtCore import Qt, QUrl, QTimer, Signal
+from PySide6.QtCore import Qt, QUrl, QTimer, Signal, QSize
 from PySide6.QtGui import QIcon
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
@@ -66,29 +66,23 @@ class VideoPlayer(QWidget):
         """初始化UI"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         # 视频显示区域
+        self.video_widget.setStyleSheet("""
+            background-color: #000000;
+        """)
         layout.addWidget(self.video_widget)
 
-        # 控制区域
-        controls_layout = QHBoxLayout()
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-
-        # 播放/暂停按钮
-        self.play_button = QPushButton()
-        self.play_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
-        self.play_button.clicked.connect(self.toggle_play)
-        controls_layout.addWidget(self.play_button)
-
-        # 停止按钮
-        self.stop_button = QPushButton()
-        self.stop_button.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
-        self.stop_button.clicked.connect(self.stop)
-        controls_layout.addWidget(self.stop_button)
-
-        # 当前时间
-        self.time_label = QLabel("00:00:00 / 00:00:00")
-        controls_layout.addWidget(self.time_label)
+        # 控制面板容器
+        controls_container = QWidget()
+        controls_container.setStyleSheet("""
+            background-color: rgba(0, 0, 0, 0.7);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        """)
+        controls_layout = QVBoxLayout(controls_container)
+        controls_layout.setContentsMargins(8, 4, 8, 8)
+        controls_layout.setSpacing(4)
 
         # 进度条
         self.position_slider = QSlider(Qt.Horizontal)
@@ -96,49 +90,146 @@ class VideoPlayer(QWidget):
         self.position_slider.sliderMoved.connect(self.set_position)
         self.position_slider.sliderPressed.connect(self.on_slider_pressed)
         self.position_slider.sliderReleased.connect(self.on_slider_released)
+        self.position_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 4px;
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 2px;
+                border: none;
+            }
+
+            QSlider::handle:horizontal {
+                background: #2979ff;
+                border: none;
+                width: 12px;
+                height: 12px;
+                margin: -4px 0;
+                border-radius: 6px;
+            }
+
+            QSlider::sub-page:horizontal {
+                background: #2979ff;
+                border-radius: 2px;
+            }
+        """)
         controls_layout.addWidget(self.position_slider)
+
+        # 底部控制区域
+        bottom_controls = QHBoxLayout()
+        bottom_controls.setContentsMargins(0, 0, 0, 0)
+        bottom_controls.setSpacing(8)
+
+        # 播放/暂停按钮
+        self.play_button = QPushButton()
+        self.play_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.play_button.clicked.connect(self.toggle_play)
+        self.play_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: white;
+                padding: 4px;
+                border-radius: 16px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        """)
+        self.play_button.setIconSize(QSize(24, 24))
+        self.play_button.setFixedSize(32, 32)
+        bottom_controls.addWidget(self.play_button)
+
+        # 停止按钮
+        self.stop_button = QPushButton()
+        self.stop_button.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
+        self.stop_button.clicked.connect(self.stop)
+        self.stop_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: white;
+                padding: 4px;
+                border-radius: 16px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        """)
+        self.stop_button.setIconSize(QSize(24, 24))
+        self.stop_button.setFixedSize(32, 32)
+        bottom_controls.addWidget(self.stop_button)
+
+        # 当前时间
+        self.time_label = QLabel("00:00:00 / 00:00:00")
+        self.time_label.setStyleSheet("""
+            color: white;
+            font-size: 12px;
+            padding: 0 8px;
+        """)
+        bottom_controls.addWidget(self.time_label)
+
+        # 弹性空间
+        bottom_controls.addStretch()
+
+        # 音量控制区域
+        volume_layout = QHBoxLayout()
+        volume_layout.setContentsMargins(0, 0, 0, 0)
+        volume_layout.setSpacing(4)
 
         # 音量按钮
         self.volume_button = QPushButton()
         self.volume_button.setIcon(self.style().standardIcon(QStyle.SP_MediaVolume))
         self.volume_button.clicked.connect(self.toggle_mute)
-        controls_layout.addWidget(self.volume_button)
+        self.volume_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: white;
+                padding: 4px;
+                border-radius: 16px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        """)
+        self.volume_button.setIconSize(QSize(20, 20))
+        self.volume_button.setFixedSize(28, 28)
+        volume_layout.addWidget(self.volume_button)
 
         # 音量滑块
         self.volume_slider = QSlider(Qt.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(50)
-        self.volume_slider.setMaximumWidth(100)
+        self.volume_slider.setMaximumWidth(80)
         self.volume_slider.valueChanged.connect(self.set_volume)
-        controls_layout.addWidget(self.volume_slider)
-
-        layout.addLayout(controls_layout)
-
-        # 设置样式
-        self.setStyleSheet("""
+        self.volume_slider.setStyleSheet("""
             QSlider::groove:horizontal {
-                border: 1px solid #999999;
-                height: 8px;
-                background: #cccccc;
-                margin: 2px 0;
-                border-radius: 4px;
+                height: 3px;
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 1px;
+                border: none;
             }
 
             QSlider::handle:horizontal {
-                background: #5c5c5c;
-                border: 1px solid #5c5c5c;
-                width: 14px;
-                height: 14px;
+                background: white;
+                border: none;
+                width: 10px;
+                height: 10px;
                 margin: -4px 0;
-                border-radius: 7px;
+                border-radius: 5px;
             }
 
             QSlider::sub-page:horizontal {
-                background: #3daee9;
-                border: 1px solid #999999;
-                border-radius: 4px;
+                background: white;
+                border-radius: 1px;
             }
         """)
+        volume_layout.addWidget(self.volume_slider)
+
+        bottom_controls.addLayout(volume_layout)
+        controls_layout.addLayout(bottom_controls)
+
+        layout.addWidget(controls_container)
 
     def load_video(self, video_path):
         """

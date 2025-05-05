@@ -1,0 +1,122 @@
+/* 自定义样式表 - 基于Google Material Design风格 */
+
+/* 全局样式 */
+QWidget {
+  font-size: 13px;
+}
+
+/* 主窗口样式 */
+QMainWindow {
+  background-color: {QTMATERIAL_SECONDARYCOLOR};
+}
+
+/* 标签样式 */
+QLabel {
+  color: {QTMATERIAL_PRIMARYTEXTCOLOR};
+  padding: 2px;
+}
+
+/* 按钮样式 */
+QPushButton {
+  border-radius: 4px;
+  padding: 6px 16px;
+  font-weight: 500;
+  text-transform: none;
+  min-height: 36px;
+}
+
+QPushButton:hover {
+  background-color: {QTMATERIAL_PRIMARYLIGHTCOLOR};
+}
+
+/* 组框样式 */
+QGroupBox {
+  font-weight: 500;
+  border: 1px solid {QTMATERIAL_SECONDARYDARKCOLOR};
+  border-radius: 4px;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+QGroupBox::title {
+  subcontrol-origin: margin;
+  subcontrol-position: top left;
+  padding: 0 4px;
+  left: 8px;
+}
+
+/* 滚动区域样式 */
+QScrollArea {
+  border: none;
+  background-color: transparent;
+}
+
+/* 进度条样式 */
+QProgressBar {
+  border: none;
+  border-radius: 2px;
+  background-color: {QTMATERIAL_SECONDARYDARKCOLOR};
+  height: 6px;
+  text-align: center;
+}
+
+QProgressBar::chunk {
+  background-color: {QTMATERIAL_PRIMARYCOLOR};
+  border-radius: 2px;
+}
+
+/* 滑块样式 */
+QSlider::groove:horizontal {
+  height: 4px;
+  background: {QTMATERIAL_SECONDARYDARKCOLOR};
+  border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+  background: {QTMATERIAL_PRIMARYCOLOR};
+  border: none;
+  width: 16px;
+  height: 16px;
+  margin: -6px 0;
+  border-radius: 8px;
+}
+
+QSlider::sub-page:horizontal {
+  background: {QTMATERIAL_PRIMARYCOLOR};
+  border-radius: 2px;
+}
+
+/* 预览标签样式 */
+#preview_label {
+  background-color: {QTMATERIAL_SECONDARYDARKCOLOR};
+  border-radius: 4px;
+  padding: 8px;
+}
+
+/* 详情区域样式 */
+#details_widget QLabel {
+  padding: 4px 0;
+}
+
+/* 自定义按钮样式 */
+.success {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.warning {
+  background-color: #FFC107;
+  color: black;
+}
+
+.danger {
+  background-color: #F44336;
+  color: white;
+}
+
+/* 修复可能的重叠问题 */
+QSplitter::handle {
+  background-color: {QTMATERIAL_SECONDARYDARKCOLOR};
+  width: 2px;
+  height: 2px;
+}

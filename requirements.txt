@@ -9,4 +9,5 @@ ultralytics
 scikit-image
 omegaconf
 insightface>=0.7.0
+qt-material
 
