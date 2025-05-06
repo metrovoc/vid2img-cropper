@@ -50,6 +50,7 @@ class Config:
             "default_player": "",  # 默认视频播放器路径
             "use_embedded_player": True,  # 是否使用内嵌播放器
             "player_volume": 50,  # 播放器音量 (0-100)
+            "favorite_shortcut": "Ctrl+S",  # 收藏快捷键
         }
     }
 

@@ -11,10 +11,11 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QComboBox, QFileDialog,
     QMessageBox, QSplitter, QGroupBox, QFormLayout, QSpinBox,
     QScrollArea, QGridLayout, QMenu, QApplication, QDialog, QLineEdit,
-    QTabWidget, QStackedWidget, QSizePolicy, QCheckBox, QProgressDialog
+    QTabWidget, QStackedWidget, QSizePolicy, QCheckBox, QProgressDialog,
+    QStatusBar
 )
-from PySide6.QtCore import Qt, QSize, QUrl, QProcess, Signal, QThread, QTimer
-from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QAction
+from PySide6.QtCore import Qt, QSize, QUrl, QProcess, Signal, QThread, QTimer, QEvent, QPoint, QObject
+from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QAction, QKeySequence, QCursor
 
 from src.ui.video_player import VideoPlayer
 
@@ -276,6 +277,16 @@ class ResultViewer(QWidget):
         self.current_video = None
         self.crop_items = []
         self.thumbnail_loader = None
+
+        # 快捷键收藏相关
+        self.favorite_shortcut = QKeySequence(self.config.get("ui", "favorite_shortcut", "Ctrl+S"))  # 从配置中读取快捷键
+        self.favorite_timer = QTimer(self)  # 用于长按收藏
+        self.favorite_timer.setInterval(200)  # 200毫秒间隔
+        self.favorite_timer.timeout.connect(self.favorite_current_under_cursor)
+        self.is_favorite_key_pressed = False
+
+        # 安装事件过滤器
+        self.installEventFilter(self)
 
         self.init_ui()
 
@@ -590,6 +601,11 @@ class ResultViewer(QWidget):
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("font-weight: 500;")
         status_layout.addWidget(self.status_label)
+
+        # 创建状态栏（用于显示临时消息）
+        self.status_bar = QStatusBar()
+        self.status_bar.setSizeGripEnabled(False)
+        status_layout.addWidget(self.status_bar)
 
         # 分页导航
         pagination_widget = QWidget()
@@ -1342,6 +1358,111 @@ class ResultViewer(QWidget):
 
         # 打开目标文件夹
         QDesktopServices.openUrl(QUrl.fromLocalFile(favorites_dir))
+
+    def eventFilter(self, obj, event):
+        """
+        事件过滤器，用于处理快捷键收藏功能
+
+        Args:
+            obj: 事件源对象
+            event: 事件对象
+
+        Returns:
+            是否已处理事件
+        """
+        # 处理键盘事件
+        if event.type() == QEvent.KeyPress:
+            # 检查是否是收藏快捷键
+            # 使用字符串形式的QKeySequence构造函数
+            # 创建一个临时的QKeySequence来获取当前按键的字符串表示
+            temp_seq = QKeySequence(event.key())
+            # 获取修饰符的字符串表示
+            modifiers_text = ""
+            modifiers = event.modifiers()
+            if modifiers & Qt.ControlModifier:
+                modifiers_text += "Ctrl+"
+            if modifiers & Qt.ShiftModifier:
+                modifiers_text += "Shift+"
+            if modifiers & Qt.AltModifier:
+                modifiers_text += "Alt+"
+            if modifiers & Qt.MetaModifier:
+                modifiers_text += "Meta+"
+
+            # 组合修饰符和键
+            key_text = temp_seq.toString()
+            if not key_text:
+                return False  # 如果没有有效的键，直接返回
+
+            current_key = QKeySequence(modifiers_text + key_text)
+
+            # 比较当前按键与配置的快捷键
+            if current_key.matches(self.favorite_shortcut) == QKeySequence.ExactMatch:
+                self.is_favorite_key_pressed = True
+                self.favorite_current_under_cursor()
+                # 启动定时器，实现长按连续收藏
+                self.favorite_timer.start()
+                return True
+        elif event.type() == QEvent.KeyRelease:
+            # 检查是否释放了收藏快捷键
+            if self.is_favorite_key_pressed:
+                # 任何键释放时，如果收藏键已按下，则停止收藏
+                self.is_favorite_key_pressed = False
+                # 停止定时器
+                self.favorite_timer.stop()
+                return True
+
+        # 继续传递事件
+        return super().eventFilter(obj, event)
+
+    def favorite_current_under_cursor(self):
+        """收藏当前鼠标指向的图片"""
+        # 获取当前鼠标位置
+        cursor_pos = QCursor.pos()
+        # 转换为缩略图区域的坐标
+        thumbnails_pos = self.thumbnails_widget.mapFromGlobal(cursor_pos)
+
+        # 检查鼠标是否在缩略图区域内
+        if not self.thumbnails_widget.rect().contains(thumbnails_pos):
+            return
+
+        # 查找鼠标下方的缩略图
+        for i in range(self.thumbnails_layout.count()):
+            item = self.thumbnails_layout.itemAt(i)
+            if item and item.widget():
+                thumbnail = item.widget()
+                # 检查鼠标是否在这个缩略图上
+                thumbnail_pos = thumbnail.mapFromGlobal(cursor_pos)
+                if thumbnail.rect().contains(thumbnail_pos):
+                    # 找到了鼠标下方的缩略图，切换收藏状态
+                    crop_id = thumbnail.crop_item["id"]
+                    new_status = self.database.toggle_favorite(crop_id)
+
+                    if new_status is not None:
+                        # 更新缩略图的收藏状态
+                        thumbnail.crop_item["is_favorite"] = new_status
+                        thumbnail.update_favorite_status()
+
+                        # 如果当前是收藏筛选模式，可能需要刷新列表
+                        if hasattr(self, 'favorite_check') and self.favorite_check.isChecked():
+                            # 延迟刷新，避免在长按时频繁刷新
+                            if not hasattr(self, 'refresh_timer'):
+                                self.refresh_timer = QTimer(self)
+                                self.refresh_timer.setSingleShot(True)
+                                self.refresh_timer.timeout.connect(self.refresh_results)
+
+                            # 如果定时器已经在运行，重置它
+                            if self.refresh_timer.isActive():
+                                self.refresh_timer.stop()
+
+                            # 设置500毫秒后刷新
+                            self.refresh_timer.start(500)
+
+                        # 显示提示
+                        status = "收藏" if new_status else "取消收藏"
+                        self.status_bar.showMessage(f"已{status}图片: {os.path.basename(thumbnail.crop_item['crop_image_path'])}", 2000)
+
+                    # 找到并处理了一个缩略图，退出循环
+                    break
 
     def open_image(self):
         """打开图像"""

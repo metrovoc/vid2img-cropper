@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (
     QScrollArea, QSizePolicy, QProgressDialog
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize, QUrl, QDir, QCoreApplication
-from PySide6.QtGui import QIcon, QPixmap, QDesktopServices
+from PySide6.QtGui import QIcon, QPixmap, QDesktopServices, QKeySequence
+from PySide6.QtWidgets import QKeySequenceEdit
 
 from src.utils.config import Config
 from src.core.database import Database
@@ -537,6 +538,19 @@ class MainWindow(QMainWindow):
         player_layout.addWidget(self.default_player_button)
 
         ui_layout.addRow("默认视频播放器:", player_layout)
+
+        # 收藏快捷键设置
+        shortcut_layout = QHBoxLayout()
+        self.favorite_shortcut_edit = QKeySequenceEdit()
+        self.favorite_shortcut_edit.setKeySequence(QKeySequence(self.config.get("ui", "favorite_shortcut", "Ctrl+S")))
+        self.favorite_shortcut_edit.setToolTip("设置用于收藏图片的键盘快捷键")
+        shortcut_layout.addWidget(self.favorite_shortcut_edit)
+
+        self.reset_shortcut_button = QPushButton("重置")
+        self.reset_shortcut_button.clicked.connect(lambda: self.favorite_shortcut_edit.setKeySequence(QKeySequence("Ctrl+S")))
+        shortcut_layout.addWidget(self.reset_shortcut_button)
+
+        ui_layout.addRow("收藏快捷键:", shortcut_layout)
 
         layout.addWidget(ui_group)
 
@@ -1121,6 +1135,7 @@ class MainWindow(QMainWindow):
         # UI选项
         self.config.set("ui", "thumbnail_size", self.thumbnail_size_spin.value())
         self.config.set("ui", "default_player", self.default_player_edit.text())
+        self.config.set("ui", "favorite_shortcut", self.favorite_shortcut_edit.keySequence().toString())
 
         self.status_bar.showMessage("设置已保存", 3000)
 
