@@ -37,7 +37,8 @@ class Config:
         "output": {
             "format": "jpg",  # 输出格式：jpg, png, webp
             "quality": 95,  # 输出质量 (1-100)
-            "output_dir": "",  # 输出目录，空字符串表示使用默认位置
+            "output_dir": "",  # 视频输出目录，空字符串表示使用默认位置
+            "image_output_dir": "",  # 图片输出目录，空字符串表示使用默认位置
         },
         # 数据库配置
         "database": {
@@ -125,9 +126,17 @@ class Config:
         return db_path
 
     def get_output_dir(self):
-        """获取输出目录"""
+        """获取视频输出目录"""
         output_dir = self.get("output", "output_dir")
         if not output_dir:
             output_dir = os.path.join(self.app_dir, "crops")
+        os.makedirs(output_dir, exist_ok=True)
+        return output_dir
+
+    def get_image_output_dir(self):
+        """获取图片输出目录"""
+        output_dir = self.get("output", "image_output_dir")
+        if not output_dir:
+            output_dir = os.path.join(self.app_dir, "image_crops")
         os.makedirs(output_dir, exist_ok=True)
         return output_dir

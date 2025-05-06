@@ -22,7 +22,9 @@ from PySide6.QtWidgets import QKeySequenceEdit
 from src.utils.config import Config
 from src.core.database import Database
 from src.core.video_processor import VideoProcessor
+from src.core.image_processor import ImageProcessor
 from src.ui.result_viewer import ResultViewer
+from src.ui.image_processor_tab import ImageProcessorTab
 
 
 class VideoProcessingThread(QThread):
@@ -106,9 +108,13 @@ class MainWindow(QMainWindow):
         self.tab_widget = QTabWidget()
         main_layout.addWidget(self.tab_widget)
 
-        # 处理选项卡
+        # 视频处理选项卡
         self.processing_tab = QWidget()
-        self.tab_widget.addTab(self.processing_tab, "处理")
+        self.tab_widget.addTab(self.processing_tab, "视频处理")
+
+        # 图片处理选项卡
+        self.image_processor_tab = ImageProcessorTab(self.config)
+        self.tab_widget.addTab(self.image_processor_tab, "图片处理")
 
         # 结果选项卡
         self.result_viewer = ResultViewer(self.config, self.database)
@@ -608,7 +614,7 @@ class MainWindow(QMainWindow):
         Args:
             index: 选项卡索引
         """
-        if index == 1:  # 结果选项卡
+        if index == 2:  # 结果选项卡
             self.result_viewer.refresh_results()
 
     def add_to_queue(self):
@@ -984,7 +990,7 @@ class MainWindow(QMainWindow):
                 self.progress_label.setText("处理完成")
 
                 # 切换到结果选项卡
-                self.tab_widget.setCurrentIndex(1)
+                self.tab_widget.setCurrentIndex(2)
 
             # 刷新UI
             QApplication.processEvents()
@@ -1012,7 +1018,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "处理完成", message)
 
             # 切换到结果选项卡
-            self.tab_widget.setCurrentIndex(1)
+            self.tab_widget.setCurrentIndex(2)
 
     def check_gpu_availability(self):
         """检测GPU可用性"""
