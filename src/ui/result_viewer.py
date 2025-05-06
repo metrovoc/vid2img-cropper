@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QStatusBar
 )
 from PySide6.QtCore import Qt, QSize, QUrl, QProcess, Signal, QThread, QTimer, QEvent, QPoint, QObject
-from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QAction, QKeySequence, QCursor
+from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QAction, QKeySequence, QCursor, QIntValidator
 
 from src.ui.video_player import VideoPlayer
 
@@ -639,6 +639,32 @@ class ResultViewer(QWidget):
         self.last_page_button.clicked.connect(lambda: self.navigate_to_page(-1))
         pagination_layout.addWidget(self.last_page_button)
 
+        # 页码跳转区域
+        jump_widget = QWidget()
+        jump_layout = QHBoxLayout(jump_widget)
+        jump_layout.setContentsMargins(0, 0, 0, 0)
+        jump_layout.setSpacing(4)
+
+        jump_label = QLabel("跳转到:")
+        jump_layout.addWidget(jump_label)
+
+        # 页码输入框
+        self.page_input = QLineEdit()
+        self.page_input.setFixedWidth(50)
+        self.page_input.setAlignment(Qt.AlignCenter)
+        # 只允许输入数字
+        self.page_input.setValidator(QIntValidator(1, 9999))
+        # 按回车键时跳转
+        self.page_input.returnPressed.connect(self.jump_to_input_page)
+        jump_layout.addWidget(self.page_input)
+
+        # 跳转按钮
+        self.jump_button = QPushButton("跳转")
+        self.jump_button.clicked.connect(self.jump_to_input_page)
+        jump_layout.addWidget(self.jump_button)
+
+        pagination_layout.addWidget(jump_widget)
+
         # 添加分页导航到状态布局
         status_layout.addWidget(pagination_widget)
 
@@ -893,6 +919,11 @@ class ResultViewer(QWidget):
         self.next_page_button.setEnabled(self.current_page < self.total_pages - 1)
         self.last_page_button.setEnabled(self.current_page < self.total_pages - 1)
 
+        # 更新页码输入框的验证器范围
+        if hasattr(self, 'page_input'):
+            # 设置验证器范围为1到总页数
+            self.page_input.setValidator(QIntValidator(1, self.total_pages))
+
     def navigate_to_page(self, page):
         """
         导航到指定页面
@@ -924,6 +955,35 @@ class ResultViewer(QWidget):
         """导航到下一页"""
         if self.current_page < self.total_pages - 1:
             self.navigate_to_page(self.current_page + 1)
+
+    def jump_to_input_page(self):
+        """跳转到输入的页码"""
+        # 获取输入的页码
+        page_text = self.page_input.text().strip()
+        if not page_text:
+            return
+
+        try:
+            # 将输入转换为整数
+            page = int(page_text)
+
+            # 页码从1开始显示，但内部从0开始计数
+            page = page - 1
+
+            # 验证页码范围
+            if page < 0:
+                page = 0
+            elif page >= self.total_pages:
+                page = self.total_pages - 1
+
+            # 跳转到指定页码
+            self.navigate_to_page(page)
+
+            # 清空输入框
+            self.page_input.clear()
+        except ValueError:
+            # 输入不是有效的数字
+            self.status_bar.showMessage("请输入有效的页码", 3000)
 
     def update_thumbnail(self, index, pixmap):
         """
