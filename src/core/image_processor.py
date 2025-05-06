@@ -54,13 +54,13 @@ class ImageProcessor:
             # 根据检测器类型选择模型文件
             model_path = None
             if self.detector_type.lower() == "yunet":
-                model_path = os.path.join(models_dir, "face_detection_yunet.onnx")
+                model_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
             elif self.detector_type.lower() == "anime":
                 model_path = os.path.join(models_dir, "lbpcascade_animeface.xml")
             elif self.detector_type.lower() == "yolov8":
                 model_path = os.path.join(models_dir, "yolov8n-face.pt")
             elif self.detector_type.lower() == "scrfd":
-                model_path = os.path.join(models_dir, "scrfd_2.5g_bnkps.onnx")
+                model_path = os.path.join(models_dir, "scrfd_10g_bnkps.onnx")
 
             # 创建检测器
             self.detector = create_detector(
@@ -239,6 +239,11 @@ class ImageProcessor:
             image_path: 图片文件路径
             output_dir: 输出目录
         """
+        # 检查检测器是否已初始化
+        if self.detector is None:
+            logger.error("人脸检测器未成功初始化，无法处理图片")
+            return
+
         # 调整大小用于检测
         height, width = image.shape[:2]
         scale = self.detection_width / width

@@ -151,6 +151,11 @@ class YuNetFaceDetector(FaceDetector):
         Returns:
             检测结果列表，每个结果为 [x, y, width, height, confidence]
         """
+        # 检查检测器是否成功加载
+        if self.detector is None:
+            logger.error("YuNet检测器未成功加载，无法执行人脸检测")
+            return []
+
         # 调整图像大小以适应模型输入
         height, width, _ = image.shape
         self.detector.setInputSize((width, height))
