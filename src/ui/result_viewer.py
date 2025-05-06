@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QGridLayout, QMenu, QApplication, QDialog, QLineEdit,
     QTabWidget, QStackedWidget, QSizePolicy
 )
-from PySide6.QtCore import Qt, QSize, QUrl, QProcess, Signal, QThread
+from PySide6.QtCore import Qt, QSize, QUrl, QProcess, Signal, QThread, QTimer
 from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QAction
 
 from src.ui.video_player import VideoPlayer
@@ -36,23 +36,58 @@ class ThumbnailLoader(QThread):
         self.crop_items = crop_items
         self.thumbnail_size = thumbnail_size
         self.running = True
+        self.cache = {}  # 缓存已加载的缩略图
 
     def run(self):
         """运行线程"""
-        for i, crop in enumerate(self.crop_items):
+        # 优先加载可见区域的缩略图
+        batch_size = 10  # 每批处理的数量
+
+        # 先处理前20个（可能在可见区域内）
+        visible_range = min(20, len(self.crop_items))
+        for i in range(visible_range):
             if not self.running:
                 break
 
-            try:
-                pixmap = QPixmap(crop["crop_image_path"])
-                if not pixmap.isNull():
-                    pixmap = pixmap.scaled(
-                        self.thumbnail_size, self.thumbnail_size,
-                        Qt.KeepAspectRatio, Qt.SmoothTransformation
-                    )
-                    self.thumbnail_loaded.emit(i, pixmap)
-            except Exception as e:
-                print(f"加载缩略图失败: {e}")
+            self.load_thumbnail(i)
+
+        # 然后批量处理剩余的
+        for i in range(visible_range, len(self.crop_items), batch_size):
+            if not self.running:
+                break
+
+            # 处理一批
+            for j in range(i, min(i + batch_size, len(self.crop_items))):
+                if not self.running:
+                    break
+
+                self.load_thumbnail(j)
+
+            # 短暂暂停，让UI有机会响应
+            self.msleep(10)
+
+    def load_thumbnail(self, index):
+        """加载单个缩略图"""
+        crop = self.crop_items[index]
+        image_path = crop["crop_image_path"]
+
+        # 检查缓存
+        if image_path in self.cache:
+            self.thumbnail_loaded.emit(index, self.cache[image_path])
+            return
+
+        try:
+            pixmap = QPixmap(image_path)
+            if not pixmap.isNull():
+                pixmap = pixmap.scaled(
+                    self.thumbnail_size, self.thumbnail_size,
+                    Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+                # 缓存缩略图
+                self.cache[image_path] = pixmap
+                self.thumbnail_loaded.emit(index, pixmap)
+        except Exception as e:
+            print(f"加载缩略图失败: {e}")
 
     def stop(self):
         """停止线程"""
@@ -484,19 +519,55 @@ class ResultViewer(QWidget):
         # 将主内容区域添加到主分割器
         main_splitter.addWidget(content_widget)
 
-        # 状态区域
+        # 状态和分页区域
         status_group = QGroupBox("状态")
         # 设置大小策略为垂直最小
         status_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         # 设置最大高度
-        status_group.setMaximumHeight(60)
+        status_group.setMaximumHeight(150)
         status_layout = QVBoxLayout(status_group)
-        status_layout.setContentsMargins(12, 16, 12, 12)
-        status_layout.setSpacing(4)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(2)
 
+        # 状态标签
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("font-weight: 500;")
         status_layout.addWidget(self.status_label)
+
+        # 分页导航
+        pagination_widget = QWidget()
+        pagination_layout = QHBoxLayout(pagination_widget)
+        pagination_layout.setContentsMargins(0, 0, 0, 0)
+        pagination_layout.setSpacing(8)
+
+        # 首页按钮
+        self.first_page_button = QPushButton("首页")
+        self.first_page_button.clicked.connect(lambda: self.navigate_to_page(0))
+        pagination_layout.addWidget(self.first_page_button)
+
+        # 上一页按钮
+        self.prev_page_button = QPushButton("上一页")
+        self.prev_page_button.clicked.connect(self.go_to_prev_page)
+        pagination_layout.addWidget(self.prev_page_button)
+
+        # 页码显示
+        self.page_label = QLabel("第 0/0 页")
+        self.page_label.setAlignment(Qt.AlignCenter)
+        self.page_label.setMinimumWidth(100)
+        pagination_layout.addWidget(self.page_label)
+
+        # 下一页按钮
+        self.next_page_button = QPushButton("下一页")
+        self.next_page_button.clicked.connect(self.go_to_next_page)
+        pagination_layout.addWidget(self.next_page_button)
+
+        # 末页按钮
+        self.last_page_button = QPushButton("末页")
+        self.last_page_button.clicked.connect(lambda: self.navigate_to_page(-1))
+        pagination_layout.addWidget(self.last_page_button)
+
+        # 添加分页导航到状态布局
+        status_layout.addWidget(pagination_widget)
 
         # 将状态区域添加到主分割器
         main_splitter.addWidget(status_group)
@@ -606,16 +677,67 @@ class ResultViewer(QWidget):
             self.thumbnail_loader.stop()
             self.thumbnail_loader.wait()
 
-        # 从数据库加载裁剪结果
+        # 设置页面大小和当前页
+        self.page_size = 100  # 每页显示的项目数
+        self.current_page = 0  # 当前页码，从0开始
+
+        # 获取总记录数
         if hasattr(self, 'current_group') and self.current_group is not None:
             # 按人脸分组筛选
-            self.crop_items = self.database.get_crops_by_group(self.current_group)
+            self.total_items = self.database.count_crops(group_id=self.current_group)
+            self.filter_type = "group"
+            self.filter_value = self.current_group
         else:
             # 按视频筛选
-            self.crop_items = self.database.get_crops(self.current_video)
+            self.total_items = self.database.count_crops(video_path=self.current_video)
+            self.filter_type = "video"
+            self.filter_value = self.current_video
+
+        # 计算总页数
+        self.total_pages = (self.total_items + self.page_size - 1) // self.page_size
+
+        if self.total_items == 0:
+            self.status_label.setText("没有找到裁剪结果")
+            return
+
+        # 加载当前页的数据
+        self.load_page(self.current_page)
+
+        # 更新状态标签
+        self.update_status_label()
+
+    def load_page(self, page):
+        """
+        加载指定页的数据
+
+        Args:
+            page: 页码，从0开始
+        """
+        # 停止之前的缩略图加载线程
+        if self.thumbnail_loader and self.thumbnail_loader.isRunning():
+            self.thumbnail_loader.stop()
+            self.thumbnail_loader.wait()
+
+        # 计算偏移量
+        offset = page * self.page_size
+
+        # 从数据库加载裁剪结果
+        if self.filter_type == "group":
+            # 按人脸分组筛选
+            self.crop_items = self.database.get_crops_by_group(
+                self.filter_value,
+                limit=self.page_size,
+                offset=offset
+            )
+        else:
+            # 按视频筛选
+            self.crop_items = self.database.get_crops(
+                self.filter_value,
+                limit=self.page_size,
+                offset=offset
+            )
 
         if not self.crop_items:
-            self.status_label.setText("没有找到裁剪结果")
             return
 
         # 获取缩略图大小
@@ -642,19 +764,74 @@ class ResultViewer(QWidget):
         self.thumbnail_loader.thumbnail_loaded.connect(self.update_thumbnail)
         self.thumbnail_loader.start()
 
+        # 更新当前页码
+        self.current_page = page
+
         # 更新状态标签
-        status_text = f"找到 {len(self.crop_items)} 个裁剪结果"
+        self.update_status_label()
+
+    def update_status_label(self):
+        """更新状态标签"""
+        # 计算当前显示的项目范围
+        start_item = self.current_page * self.page_size + 1
+        end_item = min(start_item + self.page_size - 1, self.total_items)
+
+        status_text = f"显示 {start_item}-{end_item} / 共 {self.total_items} 个裁剪结果"
+
+        # 添加分页信息
+        status_text += f" (第 {self.current_page + 1}/{self.total_pages} 页)"
 
         # 添加筛选信息
-        if hasattr(self, 'current_video') and self.current_video:
-            video_name = os.path.basename(self.current_video)
+        if self.filter_type == "video" and self.filter_value:
+            video_name = os.path.basename(self.filter_value)
             status_text += f" (视频: {video_name})"
 
-        if hasattr(self, 'current_group') and self.current_group:
+        if self.filter_type == "group" and self.filter_value:
             group_name = self.group_combo.currentText()
             status_text += f" (人物: {group_name})"
 
         self.status_label.setText(status_text)
+
+        # 更新页码标签
+        self.page_label.setText(f"第 {self.current_page + 1}/{self.total_pages} 页")
+
+        # 更新分页按钮状态
+        self.first_page_button.setEnabled(self.current_page > 0)
+        self.prev_page_button.setEnabled(self.current_page > 0)
+        self.next_page_button.setEnabled(self.current_page < self.total_pages - 1)
+        self.last_page_button.setEnabled(self.current_page < self.total_pages - 1)
+
+    def navigate_to_page(self, page):
+        """
+        导航到指定页面
+
+        Args:
+            page: 页码，从0开始，如果为-1则表示最后一页
+        """
+        if page == -1:
+            page = self.total_pages - 1
+
+        if page < 0 or page >= self.total_pages:
+            return
+
+        if page == self.current_page:
+            return
+
+        # 清空缩略图区域
+        self.clear_thumbnails()
+
+        # 加载新页面
+        self.load_page(page)
+
+    def go_to_prev_page(self):
+        """导航到上一页"""
+        if self.current_page > 0:
+            self.navigate_to_page(self.current_page - 1)
+
+    def go_to_next_page(self):
+        """导航到下一页"""
+        if self.current_page < self.total_pages - 1:
+            self.navigate_to_page(self.current_page + 1)
 
     def update_thumbnail(self, index, pixmap):
         """
@@ -1292,5 +1469,24 @@ class ResultViewer(QWidget):
         super().resizeEvent(event)
 
         # 如果有裁剪结果，重新加载以适应新的窗口大小
-        if self.crop_items:
-            self.load_crops()
+        # 使用延迟重新加载，避免频繁调整窗口大小时多次重新加载
+        if hasattr(self, 'resize_timer'):
+            self.resize_timer.stop()
+        else:
+            # 创建一个单次触发的定时器
+            self.resize_timer = QTimer()
+            self.resize_timer.setSingleShot(True)
+            self.resize_timer.timeout.connect(self.on_resize_timeout)
+
+        # 设置定时器，300毫秒后触发重新加载
+        self.resize_timer.start(300)
+
+    def on_resize_timeout(self):
+        """窗口大小变化后的延迟处理"""
+        # 如果有裁剪结果，重新加载当前页面
+        if hasattr(self, 'crop_items') and self.crop_items:
+            # 清空缩略图区域
+            self.clear_thumbnails()
+
+            # 重新加载当前页面
+            self.load_page(self.current_page)
