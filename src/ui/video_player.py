@@ -88,7 +88,7 @@ class VideoPlayer(QWidget):
         controls_container.setFixedHeight(80)
         controls_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         controls_layout = QVBoxLayout(controls_container)
-        controls_layout.setContentsMargins(8, 4, 8, 8)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(4)
 
         # 进度条

@@ -116,7 +116,7 @@ class CropThumbnail(QWidget):
     def init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
         # 缩略图容器
@@ -130,7 +130,7 @@ class CropThumbnail(QWidget):
         """)
 
         image_layout = QVBoxLayout(image_container)
-        image_layout.setContentsMargins(4, 4, 4, 4)
+        image_layout.setContentsMargins(0, 0, 0, 0)
         image_layout.setAlignment(Qt.AlignCenter)
 
         # 缩略图标签
@@ -252,7 +252,7 @@ class ResultViewer(QWidget):
     def init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
         # 创建主分割器，允许用户调整各区域大小
@@ -267,7 +267,7 @@ class ResultViewer(QWidget):
         # 设置最大高度
         control_group.setMaximumHeight(120)
         control_layout = QHBoxLayout(control_group)
-        control_layout.setContentsMargins(12, 16, 12, 12)
+        control_layout.setContentsMargins(0, 0, 0, 0)
         control_layout.setSpacing(12)
 
         # 左侧控制区域
@@ -360,11 +360,11 @@ class ResultViewer(QWidget):
         # 缩略图区域
         thumbnails_group = QGroupBox("缩略图")
         thumbnails_layout_main = QVBoxLayout(thumbnails_group)
-        thumbnails_layout_main.setContentsMargins(12, 16, 12, 12)
+        thumbnails_layout_main.setContentsMargins(0, 0, 0, 0)
 
         self.thumbnails_widget = QWidget()
         self.thumbnails_layout = QGridLayout(self.thumbnails_widget)
-        self.thumbnails_layout.setContentsMargins(4, 4, 4, 4)
+        self.thumbnails_layout.setContentsMargins(0, 0, 0, 0)
         self.thumbnails_layout.setSpacing(12)
 
         # 滚动区域
@@ -400,7 +400,7 @@ class ResultViewer(QWidget):
         details_group = QGroupBox("详细信息")
         details_group.setMinimumWidth(300)
         details_form = QFormLayout(details_group)
-        details_form.setContentsMargins(12, 16, 12, 12)
+        details_form.setContentsMargins(0, 0, 0, 0)
         details_form.setSpacing(8)
         details_form.setLabelAlignment(Qt.AlignRight)
 
@@ -467,7 +467,7 @@ class ResultViewer(QWidget):
         preview_group = QGroupBox("预览/视频")
         preview_group.setMinimumHeight(400)  # 确保有足够的高度
         preview_group_layout = QVBoxLayout(preview_group)
-        preview_group_layout.setContentsMargins(12, 16, 12, 12)
+        preview_group_layout.setContentsMargins(0, 0, 0, 0)
         preview_group_layout.addWidget(self.stacked_widget)
 
         details_content_layout.addWidget(preview_group)
@@ -475,7 +475,7 @@ class ResultViewer(QWidget):
         # 操作组
         actions_group = QGroupBox("操作")
         actions_layout = QVBoxLayout(actions_group)
-        actions_layout.setContentsMargins(12, 16, 12, 12)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(8)
 
         # 创建按钮网格布局

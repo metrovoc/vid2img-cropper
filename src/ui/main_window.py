@@ -192,7 +192,7 @@ class MainWindow(QMainWindow):
         # 处理选项区域
         options_group = QGroupBox("处理选项")
         options_main_layout = QVBoxLayout(options_group)
-        options_main_layout.setContentsMargins(12, 16, 12, 12)
+        options_main_layout.setContentsMargins(0, 0, 0, 0)
 
         # 创建滚动区域
         options_scroll = QScrollArea()
@@ -432,7 +432,7 @@ class MainWindow(QMainWindow):
         # 设置最大高度
         progress_group.setMaximumHeight(100)
         progress_layout = QVBoxLayout(progress_group)
-        progress_layout.setContentsMargins(12, 0, 12, 0)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
         progress_layout.setSpacing(0)
 
         self.progress_bar = QProgressBar()
