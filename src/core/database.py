@@ -48,6 +48,7 @@ class Database:
             group_id INTEGER,
             feature_vector TEXT,
             image_hash TEXT,
+            is_favorite INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (group_id) REFERENCES face_groups(id)
         )
@@ -66,6 +67,10 @@ class Database:
         # 检查是否需要添加image_hash列
         if "image_hash" not in columns:
             cursor.execute("ALTER TABLE crops ADD COLUMN image_hash TEXT")
+
+        # 检查是否需要添加is_favorite列
+        if "is_favorite" not in columns:
+            cursor.execute("ALTER TABLE crops ADD COLUMN is_favorite INTEGER DEFAULT 0")
 
         # 创建索引
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_video_path ON crops(video_path)')
@@ -695,3 +700,106 @@ class Database:
         except Exception as e:
             print(f"计算图像哈希失败: {e}")
             return None
+
+    # 收藏相关方法
+
+    def toggle_favorite(self, crop_id, favorite_status=None):
+        """
+        切换或设置裁剪图像的收藏状态
+
+        Args:
+            crop_id: 裁剪记录ID
+            favorite_status: 如果提供，则设置为指定状态；否则切换当前状态
+
+        Returns:
+            新的收藏状态 (1表示已收藏，0表示未收藏)
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        if favorite_status is None:
+            # 获取当前状态
+            cursor.execute("SELECT is_favorite FROM crops WHERE id = ?", (crop_id,))
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return None
+
+            # 切换状态
+            current_status = row[0] or 0  # 确保不是None
+            new_status = 1 if current_status == 0 else 0
+        else:
+            # 设置为指定状态
+            new_status = 1 if favorite_status else 0
+
+        # 更新状态
+        cursor.execute("UPDATE crops SET is_favorite = ? WHERE id = ?", (new_status, crop_id))
+        conn.commit()
+        conn.close()
+
+        return new_status
+
+    def get_favorite_crops(self, limit=None, offset=None):
+        """
+        获取所有收藏的裁剪图像
+
+        Args:
+            limit: 可选，限制返回记录数
+            offset: 可选，结果偏移量
+
+        Returns:
+            收藏的裁剪记录列表
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = """
+            SELECT c.*, g.name as group_name
+            FROM crops c
+            LEFT JOIN face_groups g ON c.group_id = g.id
+            WHERE c.is_favorite = 1
+            ORDER BY c.video_path, c.timestamp_ms
+        """
+        params = []
+
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+
+            if offset is not None:
+                query += " OFFSET ?"
+                params.append(offset)
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        # 转换为字典列表
+        results = []
+        for row in rows:
+            item = dict(row)
+            # 将JSON字符串转换回Python对象
+            if item['bounding_box']:
+                item['bounding_box'] = json.loads(item['bounding_box'])
+            if item['feature_vector']:
+                item['feature_vector'] = json.loads(item['feature_vector'])
+            results.append(item)
+
+        conn.close()
+        return results
+
+    def count_favorite_crops(self):
+        """
+        计算收藏的裁剪图像数量
+
+        Returns:
+            收藏的记录数量
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM crops WHERE is_favorite = 1")
+        count = cursor.fetchone()[0]
+
+        conn.close()
+        return count

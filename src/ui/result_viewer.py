@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QComboBox, QFileDialog,
     QMessageBox, QSplitter, QGroupBox, QFormLayout, QSpinBox,
     QScrollArea, QGridLayout, QMenu, QApplication, QDialog, QLineEdit,
-    QTabWidget, QStackedWidget, QSizePolicy
+    QTabWidget, QStackedWidget, QSizePolicy, QCheckBox, QProgressDialog
 )
 from PySide6.QtCore import Qt, QSize, QUrl, QProcess, Signal, QThread, QTimer
 from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QAction
@@ -149,6 +149,11 @@ class CropThumbnail(QWidget):
         image_layout.addWidget(self.image_label)
         layout.addWidget(image_container)
 
+        # 底部信息区域
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(2)
+
         # 时间戳标签
         timestamp_ms = self.crop_item["timestamp_ms"]
         timestamp_str = self.format_timestamp(timestamp_ms)
@@ -161,8 +166,16 @@ class CropThumbnail(QWidget):
             font-weight: 500;
             padding: 2px;
         """)
+        bottom_layout.addWidget(self.timestamp_label, 1)  # 1表示伸展因子
 
-        layout.addWidget(self.timestamp_label)
+        # 收藏标记
+        self.favorite_label = QLabel()
+        self.favorite_label.setFixedSize(16, 16)
+        self.favorite_label.setAlignment(Qt.AlignCenter)
+        self.update_favorite_status()
+        bottom_layout.addWidget(self.favorite_label)
+
+        layout.addLayout(bottom_layout)
 
         # 设置整体样式
         self.setStyleSheet("""
@@ -175,6 +188,23 @@ class CropThumbnail(QWidget):
                 background-color: rgba(0, 0, 0, 0.05);
             }
         """)
+
+    def update_favorite_status(self):
+        """更新收藏状态标记"""
+        is_favorite = self.crop_item.get("is_favorite", 0)
+        if is_favorite:
+            # 显示黄色星标
+            self.favorite_label.setStyleSheet("""
+                QLabel {
+                    color: #FFD700;
+                    font-size: 14px;
+                    font-weight: bold;
+                }
+            """)
+            self.favorite_label.setText("★")
+        else:
+            # 清空星标
+            self.favorite_label.setText("")
 
     def load_thumbnail(self):
         """加载缩略图"""
@@ -310,6 +340,22 @@ class ResultViewer(QWidget):
 
         left_layout.addWidget(group_select_widget)
 
+        # 收藏筛选
+        favorite_widget = QWidget()
+        favorite_layout = QHBoxLayout(favorite_widget)
+        favorite_layout.setContentsMargins(0, 0, 0, 0)
+        favorite_layout.setSpacing(8)
+
+        favorite_label = QLabel("收藏:")
+        favorite_label.setStyleSheet("font-weight: 500;")
+        favorite_layout.addWidget(favorite_label)
+
+        self.favorite_check = QCheckBox("只显示收藏")
+        self.favorite_check.stateChanged.connect(self.on_favorite_filter_changed)
+        favorite_layout.addWidget(self.favorite_check)
+
+        left_layout.addWidget(favorite_widget)
+
         control_layout.addWidget(left_control)
 
         # 右侧按钮区域
@@ -323,6 +369,12 @@ class ResultViewer(QWidget):
         self.delete_video_button.setProperty("class", "danger")
         self.delete_video_button.clicked.connect(self.delete_video_crops)
         right_layout.addWidget(self.delete_video_button)
+
+        # 下载收藏按钮
+        self.download_favorites_button = QPushButton("下载收藏图片")
+        self.download_favorites_button.setProperty("class", "success")
+        self.download_favorites_button.clicked.connect(self.download_favorites)
+        right_layout.addWidget(self.download_favorites_button)
 
         # 刷新按钮
         self.refresh_button = QPushButton("刷新")
@@ -500,6 +552,11 @@ class ResultViewer(QWidget):
         self.delete_crop_button.clicked.connect(self.delete_crop)
         button_grid.addWidget(self.delete_crop_button, 1, 1)
 
+        # 收藏按钮
+        self.toggle_favorite_button = QPushButton("收藏/取消收藏")
+        self.toggle_favorite_button.clicked.connect(self.toggle_favorite)
+        button_grid.addWidget(self.toggle_favorite_button, 2, 0, 1, 2)  # 跨两列
+
         actions_layout.addLayout(button_grid)
         details_content_layout.addWidget(actions_group)
 
@@ -605,6 +662,13 @@ class ResultViewer(QWidget):
 
         self.context_menu.addSeparator()
 
+        # 添加收藏/取消收藏菜单项
+        self.action_toggle_favorite = QAction("收藏", self)
+        self.action_toggle_favorite.triggered.connect(self.toggle_favorite)
+        self.context_menu.addAction(self.action_toggle_favorite)
+
+        self.context_menu.addSeparator()
+
         self.action_delete_crop = QAction("删除裁剪", self)
         self.action_delete_crop.triggered.connect(self.delete_crop)
         self.context_menu.addAction(self.action_delete_crop)
@@ -682,7 +746,12 @@ class ResultViewer(QWidget):
         self.current_page = 0  # 当前页码，从0开始
 
         # 获取总记录数
-        if hasattr(self, 'current_group') and self.current_group is not None:
+        if hasattr(self, 'favorite_check') and self.favorite_check.isChecked():
+            # 只显示收藏
+            self.total_items = self.database.count_favorite_crops()
+            self.filter_type = "favorite"
+            self.filter_value = None
+        elif hasattr(self, 'current_group') and self.current_group is not None:
             # 按人脸分组筛选
             self.total_items = self.database.count_crops(group_id=self.current_group)
             self.filter_type = "group"
@@ -722,7 +791,13 @@ class ResultViewer(QWidget):
         offset = page * self.page_size
 
         # 从数据库加载裁剪结果
-        if self.filter_type == "group":
+        if self.filter_type == "favorite":
+            # 按收藏筛选
+            self.crop_items = self.database.get_favorite_crops(
+                limit=self.page_size,
+                offset=offset
+            )
+        elif self.filter_type == "group":
             # 按人脸分组筛选
             self.crop_items = self.database.get_crops_by_group(
                 self.filter_value,
@@ -782,11 +857,12 @@ class ResultViewer(QWidget):
         status_text += f" (第 {self.current_page + 1}/{self.total_pages} 页)"
 
         # 添加筛选信息
-        if self.filter_type == "video" and self.filter_value:
+        if self.filter_type == "favorite":
+            status_text += " (仅显示收藏)"
+        elif self.filter_type == "video" and self.filter_value:
             video_name = os.path.basename(self.filter_value)
             status_text += f" (视频: {video_name})"
-
-        if self.filter_type == "group" and self.filter_value:
+        elif self.filter_type == "group" and self.filter_value:
             group_name = self.group_combo.currentText()
             status_text += f" (人物: {group_name})"
 
@@ -884,6 +960,7 @@ class ResultViewer(QWidget):
         self.jump_to_time_button.setEnabled(False)
         self.open_image_button.setEnabled(False)
         self.delete_crop_button.setEnabled(False)
+        self.toggle_favorite_button.setEnabled(False)
 
     def on_thumbnail_clicked(self, crop_item):
         """
@@ -959,6 +1036,20 @@ class ResultViewer(QWidget):
         self.jump_to_time_button.setEnabled(True)
         self.open_image_button.setEnabled(True)
         self.delete_crop_button.setEnabled(True)
+        self.toggle_favorite_button.setEnabled(True)
+
+        # 更新收藏按钮文本
+        is_favorite = crop_item.get("is_favorite", 0)
+        if is_favorite:
+            self.toggle_favorite_button.setText("取消收藏")
+            self.toggle_favorite_button.setProperty("class", "")
+        else:
+            self.toggle_favorite_button.setText("收藏")
+            self.toggle_favorite_button.setProperty("class", "success")
+
+        # 刷新样式
+        self.toggle_favorite_button.style().unpolish(self.toggle_favorite_button)
+        self.toggle_favorite_button.style().polish(self.toggle_favorite_button)
 
         # 保存当前选中的裁剪项
         self.current_crop = crop_item
@@ -1130,6 +1221,127 @@ class ResultViewer(QWidget):
         """视频播放完成处理"""
         # 切换回预览模式
         self.stacked_widget.setCurrentIndex(0)
+
+    def on_favorite_filter_changed(self, state):
+        """
+        收藏筛选变化处理
+
+        Args:
+            state: 复选框状态
+        """
+        # 重新加载裁剪结果
+        self.load_crops()
+
+    def toggle_favorite(self):
+        """切换当前裁剪项的收藏状态"""
+        if not hasattr(self, "current_crop"):
+            return
+
+        crop_id = self.current_crop["id"]
+
+        # 切换收藏状态
+        new_status = self.database.toggle_favorite(crop_id)
+
+        if new_status is not None:
+            # 更新当前裁剪项的收藏状态
+            self.current_crop["is_favorite"] = new_status
+
+            # 更新UI
+            self.update_details(self.current_crop)
+
+            # 如果当前是收藏筛选模式，可能需要刷新列表
+            if hasattr(self, 'favorite_check') and self.favorite_check.isChecked():
+                self.refresh_results()
+            else:
+                # 找到并更新对应的缩略图
+                for i in range(self.thumbnails_layout.count()):
+                    item = self.thumbnails_layout.itemAt(i)
+                    if item and item.widget():
+                        thumbnail = item.widget()
+                        if thumbnail.crop_item["id"] == crop_id:
+                            thumbnail.crop_item["is_favorite"] = new_status
+                            thumbnail.update_favorite_status()
+                            break
+
+            # 显示提示
+            status = "收藏" if new_status else "取消收藏"
+            self.status_bar.showMessage(f"已{status}当前图片", 3000)
+
+    def download_favorites(self):
+        """下载所有收藏的图片"""
+        # 获取所有收藏的裁剪项
+        favorite_crops = self.database.get_favorite_crops()
+
+        if not favorite_crops:
+            QMessageBox.information(self, "提示", "没有收藏的图片")
+            return
+
+        # 选择保存目录
+        dir_dialog = QFileDialog()
+        dir_dialog.setFileMode(QFileDialog.Directory)
+        dir_dialog.setOption(QFileDialog.ShowDirsOnly, True)
+
+        if not dir_dialog.exec():
+            return
+
+        save_dir = dir_dialog.selectedFiles()[0]
+        if not save_dir:
+            return
+
+        # 创建收藏文件夹
+        favorites_dir = os.path.join(save_dir, "收藏图片")
+        os.makedirs(favorites_dir, exist_ok=True)
+
+        # 创建进度对话框
+        progress_dialog = QProgressDialog("正在下载收藏图片...", "取消", 0, len(favorite_crops), self)
+        progress_dialog.setWindowTitle("下载收藏")
+        progress_dialog.setWindowModality(Qt.WindowModal)
+        progress_dialog.setValue(0)
+
+        # 复制图片
+        copied_count = 0
+        for i, crop in enumerate(favorite_crops):
+            # 更新进度
+            progress_dialog.setValue(i)
+            QApplication.processEvents()
+
+            if progress_dialog.wasCanceled():
+                break
+
+            # 源文件路径
+            src_path = crop["crop_image_path"]
+            if not os.path.exists(src_path):
+                continue
+
+            # 目标文件路径
+            filename = os.path.basename(src_path)
+            dst_path = os.path.join(favorites_dir, filename)
+
+            # 如果文件已存在，添加序号
+            if os.path.exists(dst_path):
+                name, ext = os.path.splitext(filename)
+                dst_path = os.path.join(favorites_dir, f"{name}_{i}{ext}")
+
+            try:
+                # 复制文件
+                import shutil
+                shutil.copy2(src_path, dst_path)
+                copied_count += 1
+            except Exception as e:
+                print(f"复制文件失败: {e}")
+
+        # 完成
+        progress_dialog.setValue(len(favorite_crops))
+
+        # 显示结果
+        QMessageBox.information(
+            self,
+            "下载完成",
+            f"已成功下载 {copied_count}/{len(favorite_crops)} 张收藏图片到:\n{favorites_dir}"
+        )
+
+        # 打开目标文件夹
+        QDesktopServices.openUrl(QUrl.fromLocalFile(favorites_dir))
 
     def open_image(self):
         """打开图像"""
